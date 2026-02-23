@@ -4,17 +4,18 @@ import {
   updateAttempt,
   deleteAttempt,
 } from "../store/attempts";
+import type { Attempt } from "../store/attempts";
 import { getWordList } from "../store/wordlists";
 import { getMappings } from "../store/mappings";
 import { buildMappingNormalizer, computeRemainingPool } from "../anagram";
 import type { DAWGResult } from "../dawg";
 import {
   escapeHtml,
-  chosenWordsPanel,
-  remainingLettersDisplay,
-  suggestionsPanel,
+  combinationBlock,
+  suggestionsResults,
   workspaceContent,
 } from "../templates/components";
+import type { SuggestionsData } from "../templates/components";
 
 function html(body: string, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(body, {
@@ -51,52 +52,59 @@ function filterByQuery(results: DAWGResult[], query: string): DAWGResult[] {
 }
 
 /**
- * Build OOB swap HTML for the 3 workspace panels.
+ * Compute the remaining pool and available words for a single combination.
  */
-function oobPanels(
-  attempt: { id: string; sourceText: string; chosenWords: string[]; mappingSnapshot: [string, string][] },
-  remainingPool: Map<string, number>,
-  results: Map<number, DAWGResult[]>,
-  totalByGroup: Map<number, number>,
-): string {
-  return [
-    chosenWordsPanel(attempt.chosenWords, attempt.id),
-    remainingLettersDisplay(remainingPool),
-    suggestionsPanel(results, "", 1, attempt.id, totalByGroup),
-  ].join("\n");
-}
+function computeWorkspaceData(
+  sourceText: string,
+  chosenWords: string[],
+  mappingSnapshot: [string, string][],
+  wordListId: string,
+) {
+  const mapping = buildMappingNormalizer(mappingSnapshot);
+  const remainingPool = computeRemainingPool(sourceText, chosenWords, mapping);
 
-/**
- * Compute the remaining pool, find available words, group and paginate them.
- */
-function computeWorkspaceData(attempt: {
-  sourceText: string;
-  chosenWords: string[];
-  mappingSnapshot: [string, string][];
-  wordListId: string;
-}) {
-  const mapping = buildMappingNormalizer(attempt.mappingSnapshot);
-  const remainingPool = computeRemainingPool(
-    attempt.sourceText,
-    attempt.chosenWords,
-    mapping,
-  );
-
-  const wordList = getWordList(attempt.wordListId);
+  const wordList = getWordList(wordListId);
   let allResults: DAWGResult[] = [];
   if (wordList) {
     allResults = wordList.dawg.findAvailable(remainingPool, mapping);
   }
 
   // Re-compute pool after findAvailable (it restores pool state internally)
-  const freshPool = computeRemainingPool(
-    attempt.sourceText,
-    attempt.chosenWords,
-    mapping,
-  );
+  const freshPool = computeRemainingPool(sourceText, chosenWords, mapping);
 
   return { remainingPool: freshPool, allResults };
 }
+
+/**
+ * Compute paginated suggestions data for a combination.
+ */
+function computeSuggestionsData(allResults: DAWGResult[]): SuggestionsData {
+  const grouped = groupByLetterCount(allResults);
+  const totalByGroup = new Map<number, number>();
+  for (const [lc, arr] of grouped) {
+    totalByGroup.set(lc, arr.length);
+  }
+  const paginated = new Map<number, DAWGResult[]>();
+  for (const [lc, arr] of grouped) {
+    paginated.set(lc, arr.slice(0, PAGE_SIZE));
+  }
+  return { results: paginated, totalByGroup };
+}
+
+/**
+ * Render a full combination block for a specific combination index.
+ */
+function renderCombinationBlock(attempt: Attempt, ci: number): string {
+  const { remainingPool, allResults } = computeWorkspaceData(
+    attempt.sourceText,
+    attempt.combinations[ci],
+    attempt.mappingSnapshot,
+    attempt.wordListId,
+  );
+  const suggestions = computeSuggestionsData(allResults);
+  return combinationBlock(ci, attempt.combinations[ci], remainingPool, attempt.id, attempt.combinations.length, suggestions);
+}
+
 
 export async function handleAttemptRoute(req: Request): Promise<Response | null> {
   const url = new URL(req.url);
@@ -129,72 +137,57 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
     });
   }
 
-  // POST /attempts/:id/choose — Add a word
+  // POST /attempts/:id/choose — Add a word to a combination
   const chooseMatch = path.match(/^\/attempts\/([^/]+)\/choose$/);
   if (method === "POST" && chooseMatch) {
     const id = decodeURIComponent(chooseMatch[1]);
     const formData = await req.formData();
     const word = (formData.get("word") as string) ?? "";
+    const ci = parseInt((formData.get("ci") as string) ?? "0", 10);
 
     const attempt = getAttempt(id);
     if (!attempt) {
       return html("<p>Deneme bulunamadi.</p>", 404);
     }
 
-    const updatedChosenWords = [...attempt.chosenWords, word];
-    const updated = updateAttempt(id, { chosenWords: updatedChosenWords });
-
-    const { remainingPool, allResults } = computeWorkspaceData(updated);
-    const grouped = groupByLetterCount(allResults);
-    const totalByGroup = new Map<number, number>();
-    for (const [lc, arr] of grouped) {
-      totalByGroup.set(lc, arr.length);
+    const combinations = attempt.combinations.map((c) => [...c]);
+    if (ci >= 0 && ci < combinations.length) {
+      combinations[ci].push(word);
     }
-    // Paginate: first page
-    const paginated = new Map<number, DAWGResult[]>();
-    for (const [lc, arr] of grouped) {
-      paginated.set(lc, arr.slice(0, PAGE_SIZE));
-    }
+    const updated = updateAttempt(id, { combinations });
 
-    return html(oobPanels(updated, remainingPool, paginated, totalByGroup));
+    return html(renderCombinationBlock(updated, ci));
   }
 
-  // DELETE /attempts/:id/chosen/:index — Remove word at index
+  // DELETE /attempts/:id/chosen/:index?ci= — Remove word at index from a combination
   const removeChosenMatch = path.match(/^\/attempts\/([^/]+)\/chosen\/(\d+)$/);
   if (method === "DELETE" && removeChosenMatch) {
     const id = decodeURIComponent(removeChosenMatch[1]);
     const index = parseInt(removeChosenMatch[2], 10);
+    const ci = parseInt(url.searchParams.get("ci") ?? "0", 10);
 
     const attempt = getAttempt(id);
     if (!attempt) {
       return html("<p>Deneme bulunamadi.</p>", 404);
     }
 
-    const updatedChosenWords = [...attempt.chosenWords];
-    if (index >= 0 && index < updatedChosenWords.length) {
-      updatedChosenWords.splice(index, 1);
+    const combinations = attempt.combinations.map((c) => [...c]);
+    if (ci >= 0 && ci < combinations.length) {
+      if (index >= 0 && index < combinations[ci].length) {
+        combinations[ci].splice(index, 1);
+      }
     }
-    const updated = updateAttempt(id, { chosenWords: updatedChosenWords });
+    const updated = updateAttempt(id, { combinations });
 
-    const { remainingPool, allResults } = computeWorkspaceData(updated);
-    const grouped = groupByLetterCount(allResults);
-    const totalByGroup = new Map<number, number>();
-    for (const [lc, arr] of grouped) {
-      totalByGroup.set(lc, arr.length);
-    }
-    const paginated = new Map<number, DAWGResult[]>();
-    for (const [lc, arr] of grouped) {
-      paginated.set(lc, arr.slice(0, PAGE_SIZE));
-    }
-
-    return html(oobPanels(updated, remainingPool, paginated, totalByGroup));
+    return html(renderCombinationBlock(updated, ci));
   }
 
-  // PUT /attempts/:id/chosen — Reorder chosen words
+  // PUT /attempts/:id/chosen — Reorder chosen words in a combination
   const reorderMatch = path.match(/^\/attempts\/([^/]+)\/chosen$/);
   if (method === "PUT" && reorderMatch) {
     const id = decodeURIComponent(reorderMatch[1]);
     const formData = await req.formData();
+    const ci = parseInt((formData.get("ci") as string) ?? "0", 10);
 
     // Collect the reordered words from form
     const words: string[] = [];
@@ -203,7 +196,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       words.push(formData.get(`word_${i}`) as string);
       i++;
     }
-    // Fallback: try "words" field as comma-separated or "word[]"
+    // Fallback: try "word[]"
     if (words.length === 0) {
       const allWords = formData.getAll("word");
       for (const w of allWords) {
@@ -216,28 +209,22 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       return html("<p>Deneme bulunamadi.</p>", 404);
     }
 
-    const updated = updateAttempt(id, { chosenWords: words });
-
-    const { remainingPool, allResults } = computeWorkspaceData(updated);
-    const grouped = groupByLetterCount(allResults);
-    const totalByGroup = new Map<number, number>();
-    for (const [lc, arr] of grouped) {
-      totalByGroup.set(lc, arr.length);
+    const combinations = attempt.combinations.map((c) => [...c]);
+    if (ci >= 0 && ci < combinations.length) {
+      combinations[ci] = words;
     }
-    const paginated = new Map<number, DAWGResult[]>();
-    for (const [lc, arr] of grouped) {
-      paginated.set(lc, arr.slice(0, PAGE_SIZE));
-    }
+    const updated = updateAttempt(id, { combinations });
 
-    return html(oobPanels(updated, remainingPool, paginated, totalByGroup));
+    return html(renderCombinationBlock(updated, ci));
   }
 
-  // GET /attempts/:id/suggestions?q=&page=&group= — Suggestions fragment
+  // GET /attempts/:id/suggestions?q=&page=&group=&ci= — Suggestions fragment
   const suggestionsMatch = path.match(/^\/attempts\/([^/]+)\/suggestions$/);
   if (method === "GET" && suggestionsMatch) {
     const id = decodeURIComponent(suggestionsMatch[1]);
     const query = url.searchParams.get("q") ?? "";
     const page = parseInt(url.searchParams.get("page") ?? "1", 10);
+    const ci = parseInt(url.searchParams.get("ci") ?? "0", 10);
     const groupFilter = url.searchParams.get("group")
       ? parseInt(url.searchParams.get("group")!, 10)
       : null;
@@ -247,7 +234,13 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       return html("<p>Deneme bulunamadi.</p>", 404);
     }
 
-    const { remainingPool, allResults } = computeWorkspaceData(attempt);
+    const chosenWords = attempt.combinations[ci] ?? [];
+    const { allResults } = computeWorkspaceData(
+      attempt.sourceText,
+      chosenWords,
+      attempt.mappingSnapshot,
+      attempt.wordListId,
+    );
 
     // Filter by query
     const filtered = filterByQuery(allResults, query);
@@ -271,9 +264,10 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
         .map(
           (r) => `<form class="word-chip-form" style="display:inline"
   hx-post="/attempts/${encodeURIComponent(attempt.id)}/choose"
-  hx-target=".workspace-panels"
-  hx-swap="innerHTML">
+  hx-target="#combination-${ci}"
+  hx-swap="outerHTML">
   <input type="hidden" name="word" value="${escapeHtml(r.word)}">
+  <input type="hidden" name="ci" value="${ci}">
   <button type="submit" class="word-chip">${escapeHtml(r.word)}</button>
 </form>`,
         )
@@ -282,8 +276,8 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       const hasMore = start + PAGE_SIZE < groupResults.length;
       const loadMore = hasMore
         ? `<button class="btn btn-load-more"
-  hx-get="/attempts/${encodeURIComponent(attempt.id)}/suggestions?q=${encodeURIComponent(query)}&page=${page + 1}&group=${groupFilter}"
-  hx-target="#suggestion-group-${groupFilter} .suggestion-words"
+  hx-get="/attempts/${encodeURIComponent(attempt.id)}/suggestions?q=${encodeURIComponent(query)}&page=${page + 1}&group=${groupFilter}&ci=${ci}"
+  hx-target="#suggestion-group-${ci}-${groupFilter} .suggestion-words"
   hx-swap="beforeend">Daha fazla...</button>`
         : "";
 
@@ -296,7 +290,53 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       paginated.set(lc, arr.slice(0, PAGE_SIZE));
     }
 
-    return html(suggestionsPanel(paginated, query, page, attempt.id, totalByGroup));
+    return html(suggestionsResults(paginated, query, page, attempt.id, totalByGroup, ci));
+  }
+
+  // POST /attempts/:id/combinations — Add a new empty combination
+  const addCombinationMatch = path.match(/^\/attempts\/([^/]+)\/combinations$/);
+  if (method === "POST" && addCombinationMatch) {
+    const id = decodeURIComponent(addCombinationMatch[1]);
+
+    const attempt = getAttempt(id);
+    if (!attempt) {
+      return html("<p>Deneme bulunamadi.</p>", 404);
+    }
+
+    const combinations = [...attempt.combinations, []];
+    const updated = updateAttempt(id, { combinations });
+
+    const newCi = updated.combinations.length - 1;
+    return html(renderCombinationBlock(updated, newCi));
+  }
+
+  // DELETE /attempts/:id/combinations/:ci — Remove a combination
+  const deleteCombinationMatch = path.match(/^\/attempts\/([^/]+)\/combinations\/(\d+)$/);
+  if (method === "DELETE" && deleteCombinationMatch) {
+    const id = decodeURIComponent(deleteCombinationMatch[1]);
+    const ci = parseInt(deleteCombinationMatch[2], 10);
+
+    const attempt = getAttempt(id);
+    if (!attempt) {
+      return html("<p>Deneme bulunamadi.</p>", 404);
+    }
+
+    // Must keep at least 1 combination
+    if (attempt.combinations.length <= 1) {
+      return html("<p>En az bir kombinasyon olmalidir.</p>", 400);
+    }
+
+    const combinations = [...attempt.combinations];
+    if (ci >= 0 && ci < combinations.length) {
+      combinations.splice(ci, 1);
+    }
+    const updated = updateAttempt(id, { combinations });
+
+    // Return ALL remaining combination blocks (handles index shifting)
+    const blocks = updated.combinations.map((_, i) =>
+      renderCombinationBlock(updated, i),
+    ).join("\n");
+    return html(blocks);
   }
 
   // POST /attempts/:id/refresh-mapping — Refresh mapping snapshot
@@ -315,17 +355,23 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       mappingVersion: currentMapping.version,
     });
 
-    const mapping = buildMappingNormalizer(updated.mappingSnapshot);
-    const remainingPool = computeRemainingPool(
-      updated.sourceText,
-      updated.chosenWords,
-      mapping,
-    );
+    const remainingPools: Map<string, number>[] = [];
+    const suggestionsPerCombination: SuggestionsData[] = [];
+    for (let i = 0; i < updated.combinations.length; i++) {
+      const { remainingPool, allResults } = computeWorkspaceData(
+        updated.sourceText,
+        updated.combinations[i],
+        updated.mappingSnapshot,
+        updated.wordListId,
+      );
+      remainingPools.push(remainingPool);
+      suggestionsPerCombination.push(computeSuggestionsData(allResults));
+    }
 
     const wordList = getWordList(updated.wordListId);
     const wordListName = wordList ? wordList.name : "Bilinmeyen liste";
 
-    return html(workspaceContent(updated, remainingPool, wordListName, false));
+    return html(workspaceContent(updated, remainingPools, wordListName, false, suggestionsPerCombination));
   }
 
   // DELETE /attempts/:id — Delete an attempt
@@ -345,4 +391,3 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
 
   return null;
 }
-

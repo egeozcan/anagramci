@@ -149,6 +149,9 @@ describe("Attempt flow", () => {
     expect(body).toContain("Kalan Harfler");
     // Should contain chosen words panel
     expect(body).toContain("Seçilen Kelimeler");
+    // Should contain combination block
+    expect(body).toContain("combination-0");
+    expect(body).toContain("Kombinasyon 1");
   });
 
   test("GET /attempts/:id for non-existent attempt returns 404", async () => {
@@ -158,19 +161,20 @@ describe("Attempt flow", () => {
 
   test("GET /attempts/:id/suggestions returns suggestions HTML", async () => {
     const res = await fetch(
-      `${BASE}/attempts/${encodeURIComponent(attemptId)}/suggestions?q=`,
+      `${BASE}/attempts/${encodeURIComponent(attemptId)}/suggestions?q=&ci=0`,
     );
     expect(res.status).toBe(200);
 
     const body = await res.text();
-    // Should contain suggestions panel structure
-    expect(body).toContain("suggestions");
+    // Should contain suggestion groups (inner content, not full panel wrapper)
+    expect(body).toContain("suggestion-group");
   });
 
-  test("POST /attempts/:id/choose adds word and returns updated panels", async () => {
+  test("POST /attempts/:id/choose adds word and returns updated combination block", async () => {
     // "her" is a common Turkish word that should exist and can be formed from "merhaba"
     const form = new FormData();
     form.set("word", "her");
+    form.set("ci", "0");
 
     const res = await fetch(
       `${BASE}/attempts/${encodeURIComponent(attemptId)}/choose`,
@@ -183,11 +187,12 @@ describe("Attempt flow", () => {
     expect(res.status).toBe(200);
 
     const body = await res.text();
-    // Should contain OOB swap panels
-    expect(body).toContain("chosen-words");
-    expect(body).toContain("remaining-letters");
-    expect(body).toContain("suggestions");
-    // The chosen word should appear in the chosen words panel
+    // Should contain combination block with panels
+    expect(body).toContain("combination-0");
+    expect(body).toContain("chosen-words-0");
+    expect(body).toContain("remaining-letters-0");
+    expect(body).toContain("suggestions-0");
+    // The chosen word should appear
     expect(body).toContain("her");
   });
 
@@ -202,18 +207,19 @@ describe("Attempt flow", () => {
     expect(body).toContain("her");
   });
 
-  test("DELETE /attempts/:id/chosen/0 removes first word", async () => {
+  test("DELETE /attempts/:id/chosen/0?ci=0 removes first word", async () => {
     const res = await fetch(
-      `${BASE}/attempts/${encodeURIComponent(attemptId)}/chosen/0`,
+      `${BASE}/attempts/${encodeURIComponent(attemptId)}/chosen/0?ci=0`,
       { method: "DELETE" },
     );
 
     expect(res.status).toBe(200);
 
     const body = await res.text();
-    // Should return updated panels
-    expect(body).toContain("chosen-words");
-    expect(body).toContain("remaining-letters");
+    // Should return updated combination block
+    expect(body).toContain("combination-0");
+    expect(body).toContain("chosen-words-0");
+    expect(body).toContain("remaining-letters-0");
   });
 
   test("DELETE /attempts/:id deletes the attempt", async () => {
@@ -246,7 +252,101 @@ describe("Attempt flow", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Settings: mappings
+// 3. Multiple combinations
+// ---------------------------------------------------------------------------
+
+describe("Multiple combinations", () => {
+  let attemptId: string;
+
+  test("setup: create attempt", async () => {
+    const form = new FormData();
+    form.set("sourceText", "merhaba dünya");
+    form.set("wordListId", "turkce_kelime_listesi");
+
+    const res = await fetch(`${BASE}/attempts`, {
+      method: "POST",
+      body: form,
+      redirect: "manual",
+    });
+
+    const redirectHeader = res.headers.get("HX-Redirect")!;
+    attemptId = decodeURIComponent(redirectHeader.replace("/attempts/", ""));
+    createdAttemptIds.push(attemptId);
+  });
+
+  test("POST /attempts/:id/combinations adds a new combination", async () => {
+    const res = await fetch(
+      `${BASE}/attempts/${encodeURIComponent(attemptId)}/combinations`,
+      { method: "POST" },
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    // Should return the new combination block
+    expect(body).toContain("combination-1");
+    expect(body).toContain("Kombinasyon 2");
+  });
+
+  test("POST /attempts/:id/choose works on combination 1", async () => {
+    const form = new FormData();
+    form.set("word", "her");
+    form.set("ci", "1");
+
+    const res = await fetch(
+      `${BASE}/attempts/${encodeURIComponent(attemptId)}/choose`,
+      {
+        method: "POST",
+        body: form,
+      },
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain("combination-1");
+    expect(body).toContain("chosen-words-1");
+    expect(body).toContain("her");
+  });
+
+  test("GET workspace shows both combinations", async () => {
+    const res = await fetch(`${BASE}/attempts/${encodeURIComponent(attemptId)}`);
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(body).toContain("combination-0");
+    expect(body).toContain("combination-1");
+    expect(body).toContain("Kombinasyon 1");
+    expect(body).toContain("Kombinasyon 2");
+  });
+
+  test("DELETE /attempts/:id/combinations/0 removes combination and re-indexes", async () => {
+    const res = await fetch(
+      `${BASE}/attempts/${encodeURIComponent(attemptId)}/combinations/0`,
+      { method: "DELETE" },
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    // The remaining combination should now be at index 0
+    expect(body).toContain("combination-0");
+    // It should contain the word from the old combination-1
+    expect(body).toContain("her");
+  });
+
+  test("DELETE /attempts/:id/combinations fails when only 1 combination left", async () => {
+    const res = await fetch(
+      `${BASE}/attempts/${encodeURIComponent(attemptId)}/combinations/0`,
+      { method: "DELETE" },
+    );
+
+    expect(res.status).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Settings: mappings
 // ---------------------------------------------------------------------------
 
 describe("Settings mappings", () => {
@@ -348,7 +448,7 @@ describe("Settings mappings", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. 404 handling
+// 5. 404 handling
 // ---------------------------------------------------------------------------
 
 describe("404 handling", () => {

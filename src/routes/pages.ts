@@ -2,13 +2,17 @@ import { listAttempts, getAttempt } from "../store/attempts";
 import { listWordLists, getWordList } from "../store/wordlists";
 import { listMappings, getMappings } from "../store/mappings";
 import { buildMappingNormalizer, computeRemainingPool } from "../anagram";
+import type { DAWGResult } from "../dawg";
 import { layout } from "../templates/layout";
 import {
   homePageContent,
   workspaceContent,
   settingsPageContent,
 } from "../templates/components";
+import type { SuggestionsData } from "../templates/components";
 import type { MappingData } from "../store/mappings";
+
+const PAGE_SIZE = 50;
 
 function html(body: string, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(body, {
@@ -62,11 +66,35 @@ export function handlePageRoute(req: Request): Response | null {
     const wordListName = wordList ? wordList.name : "Bilinmeyen liste";
 
     const mapping = buildMappingNormalizer(attempt.mappingSnapshot);
-    const remainingPool = computeRemainingPool(
-      attempt.sourceText,
-      attempt.chosenWords,
-      mapping,
-    );
+    const remainingPools: Map<string, number>[] = [];
+    const suggestionsPerCombination: SuggestionsData[] = [];
+
+    for (const chosenWords of attempt.combinations) {
+      const pool = computeRemainingPool(attempt.sourceText, chosenWords, mapping);
+      remainingPools.push(pool);
+
+      let allResults: DAWGResult[] = [];
+      if (wordList) {
+        allResults = wordList.dawg.findAvailable(pool, mapping);
+      }
+      // Re-compute pool (findAvailable may mutate internally)
+      const freshPool = computeRemainingPool(attempt.sourceText, chosenWords, mapping);
+      remainingPools[remainingPools.length - 1] = freshPool;
+
+      const grouped = new Map<number, DAWGResult[]>();
+      for (const r of allResults) {
+        let arr = grouped.get(r.letterCount);
+        if (!arr) { arr = []; grouped.set(r.letterCount, arr); }
+        arr.push(r);
+      }
+      const totalByGroup = new Map<number, number>();
+      const paginated = new Map<number, DAWGResult[]>();
+      for (const [lc, arr] of grouped) {
+        totalByGroup.set(lc, arr.length);
+        paginated.set(lc, arr.slice(0, PAGE_SIZE));
+      }
+      suggestionsPerCombination.push({ results: paginated, totalByGroup });
+    }
 
     // Check if mapping is stale
     const currentMapping = getMappings(attempt.wordListId);
@@ -74,7 +102,7 @@ export function handlePageRoute(req: Request): Response | null {
 
     const body = layout(
       "Calisma Alani",
-      `<div class="workspace">${workspaceContent(attempt, remainingPool, wordListName, mappingStale)}</div>`,
+      `<div class="workspace">${workspaceContent(attempt, remainingPools, wordListName, mappingStale, suggestionsPerCombination)}</div>`,
     );
     return html(body);
   }

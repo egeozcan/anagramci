@@ -41,8 +41,9 @@ export function homePageContent(
           hour: "2-digit",
           minute: "2-digit",
         });
-        const chosenPreview = a.chosenWords.length > 0
-          ? escapeHtml(a.chosenWords.join(" "))
+        const allWords = a.combinations.flat();
+        const chosenPreview = allWords.length > 0
+          ? escapeHtml(allWords.join(" "))
           : "<em>Henüz kelime seçilmedi</em>";
 
         return `<div class="attempt-card">
@@ -105,9 +106,10 @@ export function homePageContent(
 
 export function workspaceContent(
   attempt: Attempt,
-  remainingPool: Map<string, number>,
+  remainingPools: Map<string, number>[],
   wordListName: string,
   mappingStale: boolean,
+  suggestionsPerCombination: SuggestionsData[] = [],
 ): string {
   const staleWarning = mappingStale
     ? `<div class="mapping-stale-warning">
@@ -119,6 +121,10 @@ export function workspaceContent(
 </div>`
     : "";
 
+  const combinationBlocks = attempt.combinations.map((chosenWords, ci) =>
+    combinationBlock(ci, chosenWords, remainingPools[ci], attempt.id, attempt.combinations.length, suggestionsPerCombination[ci]),
+  ).join("\n");
+
   return `<div class="workspace-header">
   <div class="workspace-source">
     <strong>Kaynak:</strong> ${escapeHtml(attempt.sourceText)}
@@ -128,10 +134,49 @@ export function workspaceContent(
   </div>
   ${staleWarning}
 </div>
-<div class="workspace-panels">
-  ${chosenWordsPanel(attempt.chosenWords, attempt.id)}
-  ${remainingLettersDisplay(remainingPool)}
-  ${suggestionsPanel(new Map(), "", 1, attempt.id, new Map())}
+<div class="combinations-container">
+  ${combinationBlocks}
+</div>
+<button class="btn btn-secondary btn-add-combination"
+  hx-post="/attempts/${encodeURIComponent(attempt.id)}/combinations"
+  hx-target=".combinations-container"
+  hx-swap="beforeend">+ Degisik Bir Kombinasyon Ekle</button>`;
+}
+
+// ---------------------------------------------------------------------------
+// Combination block
+// ---------------------------------------------------------------------------
+
+export interface SuggestionsData {
+  results: Map<number, DAWGResult[]>;
+  totalByGroup: Map<number, number>;
+}
+
+export function combinationBlock(
+  ci: number,
+  chosenWords: string[],
+  remainingPool: Map<string, number>,
+  attemptId: string,
+  totalCombinations: number,
+  suggestions: SuggestionsData = { results: new Map(), totalByGroup: new Map() },
+): string {
+  const deleteBtn = totalCombinations > 1
+    ? `<button class="btn btn-danger btn-sm"
+    hx-delete="/attempts/${encodeURIComponent(attemptId)}/combinations/${ci}"
+    hx-target=".combinations-container"
+    hx-swap="innerHTML">Sil</button>`
+    : "";
+
+  return `<div class="combination-block" id="combination-${ci}">
+  <div class="combination-header">
+    <span class="combination-label">Kombinasyon ${ci + 1}</span>
+    ${deleteBtn}
+  </div>
+  <div class="combination-panels">
+    ${chosenWordsPanel(chosenWords, attemptId, ci)}
+    ${remainingLettersDisplay(remainingPool, ci)}
+    ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci)}
+  </div>
 </div>`;
 }
 
@@ -139,7 +184,7 @@ export function workspaceContent(
 // Chosen words panel
 // ---------------------------------------------------------------------------
 
-export function chosenWordsPanel(chosenWords: string[], attemptId: string): string {
+export function chosenWordsPanel(chosenWords: string[], attemptId: string, ci: number = 0): string {
   const phrase = chosenWords.length > 0
     ? `<div class="chosen-phrase">${escapeHtml(chosenWords.join(" "))}</div>`
     : "";
@@ -154,9 +199,9 @@ ${chosenWords
     (w, i) => `  <li class="chosen-word-item">
     <span class="chosen-word-text">${escapeHtml(w)}</span>
     <button class="btn btn-remove"
-      hx-delete="/attempts/${encodeURIComponent(attemptId)}/chosen/${i}"
-      hx-target=".workspace-panels"
-      hx-swap="innerHTML"
+      hx-delete="/attempts/${encodeURIComponent(attemptId)}/chosen/${i}?ci=${ci}"
+      hx-target="#combination-${ci}"
+      hx-swap="outerHTML"
       title="Kaldır">&times;</button>
   </li>`,
   )
@@ -164,7 +209,7 @@ ${chosenWords
 </ol>`;
   }
 
-  return `<div id="chosen-words" class="panel panel-chosen">
+  return `<div id="chosen-words-${ci}" class="panel panel-chosen">
   <h3>Seçilen Kelimeler</h3>
   ${phrase}
   ${wordItems}
@@ -175,9 +220,9 @@ ${chosenWords
 // Remaining letters display
 // ---------------------------------------------------------------------------
 
-export function remainingLettersDisplay(pool: Map<string, number>): string {
+export function remainingLettersDisplay(pool: Map<string, number>, ci: number = 0): string {
   if (pool.size === 0) {
-    return `<div id="remaining-letters" class="panel panel-remaining">
+    return `<div id="remaining-letters-${ci}" class="panel panel-remaining">
   <h3>Kalan Harfler</h3>
   <p class="empty-state">Kalan harf yok</p>
 </div>`;
@@ -192,7 +237,7 @@ export function remainingLettersDisplay(pool: Map<string, number>): string {
     )
     .join("");
 
-  return `<div id="remaining-letters" class="panel panel-remaining">
+  return `<div id="remaining-letters-${ci}" class="panel panel-remaining">
   <h3>Kalan Harfler</h3>
   <div class="letter-chips">${chips}</div>
 </div>`;
@@ -208,6 +253,7 @@ export function suggestionsPanel(
   page: number,
   attemptId: string,
   totalByGroup: Map<number, number>,
+  ci: number = 0,
 ): string {
   const escapedQuery = escapeHtml(query);
 
@@ -215,64 +261,78 @@ export function suggestionsPanel(
   <input type="search" name="q" value="${escapedQuery}"
     placeholder="Kelime ara..."
     autocomplete="off"
-    hx-get="/attempts/${encodeURIComponent(attemptId)}/suggestions"
+    hx-get="/attempts/${encodeURIComponent(attemptId)}/suggestions?ci=${ci}"
     hx-trigger="keyup changed delay:300ms"
-    hx-target="#suggestions"
+    hx-target="#suggestions-results-${ci}"
     hx-swap="innerHTML"
-    hx-indicator=".suggestions-loading">
-  <span class="suggestions-loading htmx-indicator">Aranıyor...</span>
+    hx-include="this"
+    hx-indicator="#suggestions-loading-${ci}">
+  <span class="suggestions-loading htmx-indicator" id="suggestions-loading-${ci}">Aranıyor...</span>
 </div>`;
 
-  let groupsHtml: string;
-  if (results.size === 0 && query === "") {
-    groupsHtml = `<p class="empty-state">Arama yaparak kelime önerilerini görüntüleyin.</p>`;
-  } else if (results.size === 0) {
-    groupsHtml = `<p class="empty-state">Sonuç bulunamadı.</p>`;
-  } else {
-    const sortedGroups = [...results.entries()].sort((a, b) => b[0] - a[0]);
+  const groupsHtml = suggestionsResults(results, query, page, attemptId, totalByGroup, ci);
 
-    groupsHtml = sortedGroups
-      .map(([letterCount, words]) => {
-        const total = totalByGroup.get(letterCount) ?? words.length;
-        const hasMore = words.length < total;
+  return `<div id="suggestions-${ci}" class="panel panel-suggestions">
+  <h3>Öneriler</h3>
+  ${searchBox}
+  <div id="suggestions-results-${ci}" class="suggestion-groups">
+    ${groupsHtml}
+  </div>
+</div>`;
+}
 
-        const wordChips = words
-          .map(
-            (r) => `<form class="word-chip-form" style="display:inline"
+/**
+ * Render just the suggestion groups content (without the panel wrapper/search box).
+ * Used by GET /suggestions to return only the swappable inner content.
+ */
+export function suggestionsResults(
+  results: Map<number, DAWGResult[]>,
+  query: string,
+  page: number,
+  attemptId: string,
+  totalByGroup: Map<number, number>,
+  ci: number = 0,
+): string {
+  if (results.size === 0) {
+    return `<p class="empty-state">Sonuç bulunamadı.</p>`;
+  }
+
+  const sortedGroups = [...results.entries()].sort((a, b) => b[0] - a[0]);
+
+  return sortedGroups
+    .map(([letterCount, words]) => {
+      const total = totalByGroup.get(letterCount) ?? words.length;
+      const hasMore = words.length < total;
+
+      const wordChips = words
+        .map(
+          (r) => `<form class="word-chip-form" style="display:inline"
   hx-post="/attempts/${encodeURIComponent(attemptId)}/choose"
-  hx-target=".workspace-panels"
-  hx-swap="innerHTML">
+  hx-target="#combination-${ci}"
+  hx-swap="outerHTML">
   <input type="hidden" name="word" value="${escapeHtml(r.word)}">
+  <input type="hidden" name="ci" value="${ci}">
   <button type="submit" class="word-chip">${escapeHtml(r.word)}</button>
 </form>`,
-          )
-          .join("");
+        )
+        .join("");
 
-        const loadMore = hasMore
-          ? `<button class="btn btn-load-more"
-  hx-get="/attempts/${encodeURIComponent(attemptId)}/suggestions?q=${encodeURIComponent(query)}&page=${page + 1}&group=${letterCount}"
-  hx-target="#suggestion-group-${letterCount} .suggestion-words"
+      const loadMore = hasMore
+        ? `<button class="btn btn-load-more"
+  hx-get="/attempts/${encodeURIComponent(attemptId)}/suggestions?q=${encodeURIComponent(query)}&page=${page + 1}&group=${letterCount}&ci=${ci}"
+  hx-target="#suggestion-group-${ci}-${letterCount} .suggestion-words"
   hx-swap="beforeend">Daha fazla...</button>`
-          : "";
+        : "";
 
-        return `<details class="suggestion-group" id="suggestion-group-${letterCount}" open>
+      return `<details class="suggestion-group" id="suggestion-group-${ci}-${letterCount}" open>
   <summary>${letterCount} harf <span class="suggestion-count">(${total} kelime)</span></summary>
   <div class="suggestion-words">
     ${wordChips}
     ${loadMore}
   </div>
 </details>`;
-      })
-      .join("\n");
-  }
-
-  return `<div id="suggestions" class="panel panel-suggestions">
-  <h3>Öneriler</h3>
-  ${searchBox}
-  <div class="suggestion-groups">
-    ${groupsHtml}
-  </div>
-</div>`;
+    })
+    .join("\n");
 }
 
 // ---------------------------------------------------------------------------

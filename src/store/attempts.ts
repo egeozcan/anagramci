@@ -9,7 +9,7 @@ export interface Attempt {
   wordListId: string;
   mappingSnapshot: [string, string][];
   mappingVersion: number;
-  chosenWords: string[];
+  combinations: string[][];
 }
 
 interface CreateAttemptInput {
@@ -20,6 +20,20 @@ interface CreateAttemptInput {
 }
 
 const DEFAULT_DIR = "data/attempts";
+
+/**
+ * Migrate legacy attempts that have `chosenWords` instead of `combinations`.
+ */
+function migrateAttempt(raw: Record<string, unknown>, filePath: string): Attempt {
+  const attempt = raw as unknown as Attempt;
+  if ("chosenWords" in raw && !("combinations" in raw)) {
+    const chosenWords = raw.chosenWords as string[];
+    (attempt as any).combinations = [chosenWords];
+    delete (attempt as any).chosenWords;
+    writeFileSync(filePath, JSON.stringify(attempt, null, 2));
+  }
+  return attempt;
+}
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) {
@@ -32,7 +46,7 @@ function attemptPath(id: string, dir: string): string {
 }
 
 /**
- * Create a new attempt with a unique ID, empty chosenWords, and persist it.
+ * Create a new attempt with a unique ID, one empty combination, and persist it.
  */
 export function createAttempt(input: CreateAttemptInput, dir: string = DEFAULT_DIR): Attempt {
   ensureDir(dir);
@@ -46,7 +60,7 @@ export function createAttempt(input: CreateAttemptInput, dir: string = DEFAULT_D
     wordListId: input.wordListId,
     mappingSnapshot: input.mappingSnapshot,
     mappingVersion: input.mappingVersion,
-    chosenWords: [],
+    combinations: [[]],
   };
 
   writeFileSync(attemptPath(attempt.id, dir), JSON.stringify(attempt, null, 2));
@@ -61,7 +75,8 @@ export function getAttempt(id: string, dir: string = DEFAULT_DIR): Attempt | nul
   if (!existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf-8")) as Attempt;
+  const raw = JSON.parse(readFileSync(filePath, "utf-8"));
+  return migrateAttempt(raw, filePath);
 }
 
 /**
@@ -95,8 +110,9 @@ export function listAttempts(dir: string = DEFAULT_DIR): Attempt[] {
 
   const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
   const attempts: Attempt[] = files.map((file) => {
-    const content = readFileSync(join(dir, file), "utf-8");
-    return JSON.parse(content) as Attempt;
+    const filePath = join(dir, file);
+    const raw = JSON.parse(readFileSync(filePath, "utf-8"));
+    return migrateAttempt(raw, filePath);
   });
 
   return attempts.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
