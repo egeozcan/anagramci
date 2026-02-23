@@ -1,3 +1,65 @@
+## Project: AnagramCI
+
+Turkish anagram solver — server-rendered with HTMX-driven partial updates.
+
+### Tech Stack
+- **Runtime**: Bun (native TypeScript, no bundler)
+- **Server**: `Bun.serve` — no framework, plain request routing
+- **Frontend**: HTMX 2.0.4 + vanilla JS (`static/app.js`) + CSS custom properties (`static/style.css`)
+- **Persistence**: JSON files on disk (`data/attempts/`, `data/mappings/`)
+- **Testing**: `bun test` (52 tests across 6 files)
+
+### Commands
+```bash
+bun run --watch src/index.ts   # Dev server (port 3000)
+bun test                       # Run tests
+```
+
+### Structure
+```
+src/
+  index.ts                     # Entry point, server setup
+  anagram.ts                   # Pool math: textToPool, subtractWord, charOverflowMasks
+  dawg.ts                      # DAWG trie for word search
+  routes/
+    pages.ts                   # GET routes for pages + static files
+    attempts.ts                # Attempt CRUD + word manipulation
+    settings.ts                # Mapping editor routes
+  store/
+    attempts.ts                # Attempt persistence (JSON)
+    mappings.ts                # Letter mapping persistence (JSON)
+    wordlists.ts               # In-memory word list loader + DAWG build
+  templates/
+    layout.ts                  # HTML shell with nav
+    components.ts              # All component templates (string functions)
+static/
+  app.js                       # Client JS: hover highlights, drag-and-drop, inline edit
+  style.css                    # Full stylesheet with CSS custom properties
+word-lists/
+  turkce_kelime_listesi.txt    # Turkish word list (one word per line)
+```
+
+### Data Model
+- **Attempt**: `{ id, sourceText, wordListId, mappingSnapshot, combinations: string[][] }` — each attempt can have multiple combination groups
+- **Combination index (`ci`)**: 0-based index into `combinations[]` — threaded through routes, templates, and frontend as `?ci=` param or `data-ci` attribute
+- **Mapping**: `{ pairs: [from, to][], version }` — normalizes similar Turkish characters (ç→c, î→i)
+- **DAWG**: Trie with suffix compression, built on startup per word list
+
+### Architecture Patterns
+- **Fragment returns**: Routes return HTML fragments, HTMX swaps them into the DOM (`hx-target`, `hx-swap="outerHTML"`)
+- **Template functions**: Pure string-returning functions in `components.ts` — no template engine
+- **Event delegation**: All client JS uses `document.addEventListener` (not per-element)
+- **Pool subtraction**: `textToPool(source) → subtractWord(pool, word) → remaining` — order matters for overflow detection
+- **`PUT /attempts/:id/chosen`**: Accepts `ci` + `word_0, word_1, ...` form fields, replaces full word list, returns re-rendered combination block. Used by both drag-and-drop reorder and inline edit.
+
+### Critical Conventions
+- **Turkish locale**: Always `toLocaleLowerCase("tr-TR")` — never bare `.toLowerCase()` (İ→i, not I)
+- **`escapeHtml()`**: Required for all user input rendered in templates
+- **`htmx.ajax()` values**: Must be a plain object `{ key: value }`, not a URL-encoded string
+- **Mapping normalization**: `buildMappingNormalizer(pairs)` → `Map<string, string>`, applied in pool/subtraction functions
+
+---
+
 ## Workflow Orchestration
 
 ### 1. Plan Node Default

@@ -1,6 +1,7 @@
 import type { Attempt } from "../store/attempts";
 import type { MappingData } from "../store/mappings";
 import type { DAWGResult } from "../dawg";
+import { buildMappingNormalizer, charOverflowMasks } from "../anagram";
 
 // ---------------------------------------------------------------------------
 // Utility
@@ -122,7 +123,7 @@ export function workspaceContent(
     : "";
 
   const combinationBlocks = attempt.combinations.map((chosenWords, ci) =>
-    combinationBlock(ci, chosenWords, remainingPools[ci], attempt.id, attempt.combinations.length, suggestionsPerCombination[ci], attempt.mappingSnapshot),
+    combinationBlock(ci, chosenWords, remainingPools[ci], attempt.id, attempt.combinations.length, suggestionsPerCombination[ci], attempt.mappingSnapshot, attempt.sourceText),
   ).join("\n");
 
   return `<div class="workspace-header">
@@ -160,6 +161,7 @@ export function combinationBlock(
   totalCombinations: number,
   suggestions: SuggestionsData = { results: new Map(), totalByGroup: new Map() },
   mappingPairs: [string, string][] = [],
+  sourceText: string = "",
 ): string {
   const deleteBtn = totalCombinations > 1
     ? `<button class="btn btn-danger btn-sm"
@@ -176,7 +178,7 @@ export function combinationBlock(
     ${deleteBtn}
   </div>
   <div class="combination-panels">
-    ${chosenWordsPanel(chosenWords, attemptId, ci)}
+    ${chosenWordsPanel(chosenWords, attemptId, ci, sourceText, mappingPairs)}
     ${remainingLettersDisplay(remainingPool, ci)}
     ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci)}
   </div>
@@ -187,9 +189,28 @@ export function combinationBlock(
 // Chosen words panel
 // ---------------------------------------------------------------------------
 
-export function chosenWordsPanel(chosenWords: string[], attemptId: string, ci: number = 0): string {
+export function chosenWordsPanel(chosenWords: string[], attemptId: string, ci: number = 0, sourceText: string = "", mappingPairs: [string, string][] = []): string {
+  const masks = sourceText && chosenWords.length > 0
+    ? charOverflowMasks(sourceText, chosenWords, buildMappingNormalizer(mappingPairs))
+    : [];
+
   const phrase = chosenWords.length > 0
-    ? `<div class="chosen-phrase">${escapeHtml(chosenWords.join(" "))}</div>`
+    ? `<div class="chosen-phrase">${chosenWords.map((w, i) => {
+        const mask = masks[i];
+        if (!mask || !mask.some(Boolean)) return escapeHtml(w);
+        // Render char-by-char, grouping consecutive same-state runs
+        const chars = [...w];
+        let html = "";
+        let inOverflow = false;
+        for (let c = 0; c < chars.length; c++) {
+          const over = mask[c];
+          if (over && !inOverflow) { html += `<span class="chosen-phrase-overflow">`; inOverflow = true; }
+          if (!over && inOverflow) { html += `</span>`; inOverflow = false; }
+          html += escapeHtml(chars[c]);
+        }
+        if (inOverflow) html += `</span>`;
+        return html;
+      }).join(" ")}</div>`
     : "";
 
   let wordItems: string;
@@ -199,7 +220,7 @@ export function chosenWordsPanel(chosenWords: string[], attemptId: string, ci: n
     wordItems = `<ol class="chosen-words-list">
 ${chosenWords
   .map(
-    (w, i) => `  <li class="chosen-word-item">
+    (w, i) => `  <li class="chosen-word-item" draggable="true" data-index="${i}">
     <span class="chosen-word-text">${escapeHtml(w)}</span>
     <button class="btn btn-remove"
       hx-delete="/attempts/${encodeURIComponent(attemptId)}/chosen/${i}?ci=${ci}"
@@ -212,7 +233,7 @@ ${chosenWords
 </ol>`;
   }
 
-  return `<div id="chosen-words-${ci}" class="panel panel-chosen">
+  return `<div id="chosen-words-${ci}" class="panel panel-chosen" data-attempt-id="${escapeHtml(attemptId)}" data-ci="${ci}">
   <h3>Seçilen Kelimeler</h3>
   ${phrase}
   ${wordItems}

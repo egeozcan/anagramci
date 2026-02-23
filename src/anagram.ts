@@ -61,3 +61,35 @@ export function computeRemainingPool(
   }
   return pool;
 }
+
+/**
+ * For each chosen word, returns a per-character boolean array indicating
+ * whether that character overflows the available pool at that point.
+ * Earlier words consume from the pool first, so order matters.
+ */
+export function charOverflowMasks(
+  sourceText: string,
+  chosenWords: string[],
+  mapping: Map<string, string>,
+): boolean[][] {
+  let pool = textToPool(sourceText, mapping);
+  return chosenWords.map((word) => {
+    const lower = word.toLocaleLowerCase("tr-TR");
+    // Track how many of each normalized letter we've consumed within this word
+    const used = new Map<string, number>();
+    const masks: boolean[] = [];
+    for (const ch of lower) {
+      if (ch === " ") {
+        masks.push(false);
+        continue;
+      }
+      const normalized = normalizeChar(ch, mapping);
+      const usedCount = used.get(normalized) || 0;
+      const available = pool.get(normalized) || 0;
+      masks.push(usedCount >= available);
+      used.set(normalized, usedCount + 1);
+    }
+    pool = subtractWord(pool, word, mapping);
+    return masks;
+  });
+}

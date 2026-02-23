@@ -70,4 +70,178 @@
       activeChip = null;
     }
   });
+
+  // -------------------------------------------------------------------------
+  // Drag-and-drop reorder for chosen words
+  // -------------------------------------------------------------------------
+  var dragSrcIndex = null;
+  var dragPanel = null;
+
+  function clearDropIndicators(list) {
+    var items = list.querySelectorAll(".chosen-word-item");
+    for (var i = 0; i < items.length; i++) {
+      items[i].classList.remove("chosen-word-item--drop-above", "chosen-word-item--drop-below");
+    }
+  }
+
+  function getWordsFromPanel(panel) {
+    var spans = panel.querySelectorAll(".chosen-word-text");
+    var words = [];
+    for (var i = 0; i < spans.length; i++) {
+      words.push(spans[i].textContent);
+    }
+    return words;
+  }
+
+  function submitWords(panel, words) {
+    var attemptId = panel.dataset.attemptId;
+    var ci = panel.dataset.ci;
+    var url = "/attempts/" + encodeURIComponent(attemptId) + "/chosen";
+    var vals = { ci: ci };
+    for (var i = 0; i < words.length; i++) {
+      vals["word_" + i] = words[i];
+    }
+    htmx.ajax("PUT", url, {
+      target: "#combination-" + ci,
+      swap: "outerHTML",
+      values: vals,
+    });
+  }
+
+  document.addEventListener("dragstart", function (e) {
+    var item = e.target.closest(".chosen-word-item[draggable]");
+    if (!item) return;
+    dragSrcIndex = parseInt(item.dataset.index, 10);
+    dragPanel = item.closest(".panel-chosen");
+    item.classList.add("chosen-word-item--dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragSrcIndex.toString());
+  });
+
+  document.addEventListener("dragover", function (e) {
+    var item = e.target.closest(".chosen-word-item[draggable]");
+    if (!item || !dragPanel) return;
+    if (!dragPanel.contains(item)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
+    var list = item.closest(".chosen-words-list");
+    if (list) clearDropIndicators(list);
+
+    var rect = item.getBoundingClientRect();
+    var midY = rect.top + rect.height / 2;
+    if (e.clientY < midY) {
+      item.classList.add("chosen-word-item--drop-above");
+    } else {
+      item.classList.add("chosen-word-item--drop-below");
+    }
+  });
+
+  document.addEventListener("dragleave", function (e) {
+    var item = e.target.closest(".chosen-word-item[draggable]");
+    if (item) {
+      item.classList.remove("chosen-word-item--drop-above", "chosen-word-item--drop-below");
+    }
+  });
+
+  document.addEventListener("drop", function (e) {
+    var item = e.target.closest(".chosen-word-item[draggable]");
+    if (!item || !dragPanel) return;
+    if (!dragPanel.contains(item)) return;
+    e.preventDefault();
+
+    var list = item.closest(".chosen-words-list");
+    if (list) clearDropIndicators(list);
+
+    var dropIndex = parseInt(item.dataset.index, 10);
+    var rect = item.getBoundingClientRect();
+    var midY = rect.top + rect.height / 2;
+    var insertAfter = e.clientY >= midY;
+
+    var words = getWordsFromPanel(dragPanel);
+    if (dragSrcIndex === null || dragSrcIndex === dropIndex) return;
+
+    // Remove dragged word, compute target position
+    var word = words.splice(dragSrcIndex, 1)[0];
+    var targetIndex = dropIndex > dragSrcIndex ? dropIndex - 1 : dropIndex;
+    if (insertAfter) targetIndex++;
+    words.splice(targetIndex, 0, word);
+
+    submitWords(dragPanel, words);
+    dragSrcIndex = null;
+    dragPanel = null;
+  });
+
+  document.addEventListener("dragend", function (e) {
+    var item = e.target.closest(".chosen-word-item[draggable]");
+    if (item) {
+      item.classList.remove("chosen-word-item--dragging");
+    }
+    if (dragPanel) {
+      var list = dragPanel.querySelector(".chosen-words-list");
+      if (list) clearDropIndicators(list);
+    }
+    dragSrcIndex = null;
+    dragPanel = null;
+  });
+
+  // -------------------------------------------------------------------------
+  // Inline edit on double-click
+  // -------------------------------------------------------------------------
+  document.addEventListener("dblclick", function (e) {
+    var span = e.target.closest(".chosen-word-text");
+    if (!span) return;
+    var item = span.closest(".chosen-word-item");
+    if (!item) return;
+    // Prevent if already editing
+    if (item.querySelector(".chosen-word-edit-input")) return;
+
+    var panel = item.closest(".panel-chosen");
+    if (!panel) return;
+
+    var originalText = span.textContent;
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "chosen-word-edit-input";
+    input.value = originalText;
+
+    span.style.display = "none";
+    span.parentNode.insertBefore(input, span.nextSibling);
+    input.focus();
+    input.select();
+
+    function commit() {
+      var newText = input.value.trim();
+      if (!newText || newText === originalText) {
+        cancel();
+        return;
+      }
+      var words = getWordsFromPanel(panel);
+      var idx = parseInt(item.dataset.index, 10);
+      words[idx] = newText;
+      submitWords(panel, words);
+    }
+
+    function cancel() {
+      span.style.display = "";
+      if (input.parentNode) input.parentNode.removeChild(input);
+    }
+
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        commit();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        cancel();
+      }
+    });
+
+    input.addEventListener("blur", function () {
+      // Small delay to let potential keydown (Enter/Escape) fire first
+      setTimeout(function () {
+        if (input.parentNode) commit();
+      }, 0);
+    });
+  });
 })();
