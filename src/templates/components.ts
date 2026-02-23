@@ -122,7 +122,7 @@ export function workspaceContent(
     : "";
 
   const combinationBlocks = attempt.combinations.map((chosenWords, ci) =>
-    combinationBlock(ci, chosenWords, remainingPools[ci], attempt.id, attempt.combinations.length, suggestionsPerCombination[ci]),
+    combinationBlock(ci, chosenWords, remainingPools[ci], attempt.id, attempt.combinations.length, suggestionsPerCombination[ci], attempt.mappingSnapshot),
   ).join("\n");
 
   return `<div class="workspace-header">
@@ -159,6 +159,7 @@ export function combinationBlock(
   attemptId: string,
   totalCombinations: number,
   suggestions: SuggestionsData = { results: new Map(), totalByGroup: new Map() },
+  mappingPairs: [string, string][] = [],
 ): string {
   const deleteBtn = totalCombinations > 1
     ? `<button class="btn btn-danger btn-sm"
@@ -167,7 +168,9 @@ export function combinationBlock(
     hx-swap="innerHTML">Sil</button>`
     : "";
 
-  return `<div class="combination-block" id="combination-${ci}">
+  const mappingJson = escapeHtml(JSON.stringify(mappingPairs));
+
+  return `<div class="combination-block" id="combination-${ci}" data-mapping="${mappingJson}">
   <div class="combination-header">
     <span class="combination-label">Kombinasyon ${ci + 1}</span>
     ${deleteBtn}
@@ -233,7 +236,7 @@ export function remainingLettersDisplay(pool: Map<string, number>, ci: number = 
   const chips = sorted
     .map(
       ([letter, count]) =>
-        `<span class="letter-chip">${escapeHtml(letter)}<sup>${count}</sup></span>`,
+        `<span class="letter-chip" data-letter="${escapeHtml(letter)}">${escapeHtml(letter)}<sup>${count}</sup></span>`,
     )
     .join("");
 

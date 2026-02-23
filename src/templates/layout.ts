@@ -7,6 +7,7 @@ export function layout(title: string, body: string): string {
   <title>${title} - Anagramcı</title>
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   <nav>

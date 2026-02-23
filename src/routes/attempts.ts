@@ -102,7 +102,7 @@ function renderCombinationBlock(attempt: Attempt, ci: number): string {
     attempt.wordListId,
   );
   const suggestions = computeSuggestionsData(allResults);
-  return combinationBlock(ci, attempt.combinations[ci], remainingPool, attempt.id, attempt.combinations.length, suggestions);
+  return combinationBlock(ci, attempt.combinations[ci], remainingPool, attempt.id, attempt.combinations.length, suggestions, attempt.mappingSnapshot);
 }
 
 

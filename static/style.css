@@ -650,6 +650,28 @@ select {
   margin-left: 1px;
 }
 
+.letter-chip--full {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  outline: 1.5px solid var(--color-success);
+  transition: background-color 0.12s ease, color 0.12s ease, outline-color 0.12s ease;
+}
+
+.letter-chip--full sup {
+  color: var(--color-success);
+}
+
+.letter-chip--partial {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-hover);
+  outline: 1.5px solid var(--color-warning);
+  transition: background-color 0.12s ease, color 0.12s ease, outline-color 0.12s ease;
+}
+
+.letter-chip--partial sup {
+  color: var(--color-warning-hover);
+}
+
 /* --------------------------------------------------------------------------
    Suggestions Panel
    -------------------------------------------------------------------------- */
