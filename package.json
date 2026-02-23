@@ -1,0 +1,13 @@
+{
+  "name": "anagramci",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.9"
+  }
+}
