@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { rmSync, mkdirSync, readdirSync } from "fs";
+import { rmSync, mkdirSync } from "fs";
 import { join } from "path";
 import { loadWordLists } from "./store/wordlists";
 import { handlePageRoute } from "./routes/pages";
