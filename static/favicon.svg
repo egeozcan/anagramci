@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Background circle for contrast -->
+  <rect width="48" height="48" rx="8" fill="#f0ebe3"/>
+
+  <!-- 2x2 Mosaic Tile Grid (centered) -->
+  <g transform="translate(6, 6)">
+    <!-- Bottom-left tile: G -->
+    <rect x="0" y="19" width="16" height="16" rx="2.5" fill="#e5ded4" stroke="#c9bfb1" stroke-width="1"/>
+    <text x="8" y="31" text-anchor="middle" font-family="Bitter, Georgia, serif" font-size="10" font-weight="600" fill="#9e9184">G</text>
+
+    <!-- Bottom-right tile: R -->
+    <rect x="19" y="19" width="16" height="16" rx="2.5" fill="#e5ded4" stroke="#c9bfb1" stroke-width="1"/>
+    <text x="27" y="31" text-anchor="middle" font-family="Bitter, Georgia, serif" font-size="10" font-weight="600" fill="#9e9184">R</text>
+
+    <!-- Top-left tile: A -->
+    <rect x="0" y="0" width="16" height="16" rx="2.5" fill="#e5ded4" stroke="#c9bfb1" stroke-width="1"/>
+    <text x="8" y="12" text-anchor="middle" font-family="Bitter, Georgia, serif" font-size="10" font-weight="600" fill="#9e9184">A</text>
+
+    <!-- Top-right tile: N (escaping — offset + rotated, green accent) -->
+    <g transform="translate(26, 1) rotate(12, 8, 8)">
+      <rect x="0" y="0" width="16" height="16" rx="2.5" fill="#5a7c65" stroke="#4a6854" stroke-width="1"/>
+      <text x="8" y="12" text-anchor="middle" font-family="Bitter, Georgia, serif" font-size="10" font-weight="700" fill="#ffffff">N</text>
+    </g>
+  </g>
+</svg>

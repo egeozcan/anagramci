@@ -4,6 +4,8 @@ Turkish anagram solver. Enter text, get word combinations from a Turkish word li
 
 Server-rendered with HTMX — no SPA framework, no build step.
 
+![Anagramcı](docs/screenshots/main.png)
+
 ## Setup
 
 Requires [Bun](https://bun.sh/).

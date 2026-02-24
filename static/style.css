@@ -187,11 +187,14 @@ nav {
 }
 
 nav .logo {
-  font-family: var(--font-heading);
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--color-primary);
-  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+}
+
+nav .logo img {
+  height: 28px;
+  width: auto;
+  display: block;
 }
 
 nav .logo:hover {

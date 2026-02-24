@@ -5,6 +5,8 @@ export function layout(title: string, body: string): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title} - Anagramcı</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -14,7 +16,7 @@ export function layout(title: string, body: string): string {
 </head>
 <body>
   <nav>
-    <a href="/" class="logo">Anagramcı</a>
+    <a href="/" class="logo"><img src="/static/logo.svg" alt="Anagramcı" height="28"></a>
     <a href="/settings">Ayarlar</a>
   </nav>
   <main>${body}</main>
