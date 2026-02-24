@@ -44,6 +44,20 @@
     }
   }
 
+  // Prevent delete button inside <summary> from toggling the combination details
+  document.addEventListener("click", function (e) {
+    var comboHeader = e.target.closest(".combination-header");
+    if (comboHeader && e.target.closest(".btn")) {
+      var details = comboHeader.closest("details");
+      if (details) {
+        var wasOpen = details.open;
+        requestAnimationFrame(function () {
+          details.open = wasOpen;
+        });
+      }
+    }
+  });
+
   document.addEventListener("mouseover", function (e) {
     var wordChip = e.target.closest(".word-chip");
 
@@ -184,6 +198,146 @@
     dragSrcIndex = null;
     dragPanel = null;
   });
+
+  // -------------------------------------------------------------------------
+  // Live preview as user types in custom word input
+  // -------------------------------------------------------------------------
+
+  function textToPool(text, mapping) {
+    var pool = {};
+    var lower = text.toLocaleLowerCase("tr-TR");
+    for (var ch of lower) {
+      if (ch === " ") continue;
+      var n = mapping[ch] || ch;
+      pool[n] = (pool[n] || 0) + 1;
+    }
+    return pool;
+  }
+
+  function charOverflowMasks(sourceText, words, mapping) {
+    var pool = textToPool(sourceText, mapping);
+    var result = [];
+    for (var wi = 0; wi < words.length; wi++) {
+      var word = words[wi];
+      var lower = word.toLocaleLowerCase("tr-TR");
+      var used = {};
+      var masks = [];
+      for (var ch of lower) {
+        if (ch === " ") { masks.push(false); continue; }
+        var n = mapping[ch] || ch;
+        var usedCount = used[n] || 0;
+        var available = pool[n] || 0;
+        masks.push(usedCount >= available);
+        used[n] = usedCount + 1;
+      }
+      result.push(masks);
+      // subtract word from pool
+      for (var ch of lower) {
+        if (ch === " ") continue;
+        var n = mapping[ch] || ch;
+        var c = pool[n] || 0;
+        if (c <= 1) { delete pool[n]; } else { pool[n] = c - 1; }
+      }
+    }
+    return { masks: result, remainingPool: pool };
+  }
+
+  function escapeHtmlJs(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function renderPhraseHtml(words, masks) {
+    var parts = [];
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      var mask = masks[i];
+      if (!mask || !mask.some(Boolean)) {
+        parts.push(escapeHtmlJs(w));
+        continue;
+      }
+      var chars = [...w];
+      var html = "";
+      var inOverflow = false;
+      for (var c = 0; c < chars.length; c++) {
+        var over = mask[c];
+        if (over && !inOverflow) { html += '<span class="chosen-phrase-overflow">'; inOverflow = true; }
+        if (!over && inOverflow) { html += '</span>'; inOverflow = false; }
+        html += escapeHtmlJs(chars[c]);
+      }
+      if (inOverflow) html += '</span>';
+      parts.push(html);
+    }
+    return parts.join(" ");
+  }
+
+  function renderRemainingHtml(pool) {
+    var keys = Object.keys(pool).sort(function (a, b) {
+      return a.localeCompare(b, "tr-TR");
+    });
+    if (keys.length === 0) {
+      return '<p class="empty-state">Kalan harf yok</p>';
+    }
+    var chips = keys.map(function (k) {
+      return '<span class="letter-chip" data-letter="' + escapeHtmlJs(k) + '">' +
+        escapeHtmlJs(k) + '<sup>' + pool[k] + '</sup></span>';
+    }).join("");
+    return '<div class="letter-chips">' + chips + '</div>';
+  }
+
+  function updateLivePreview(input) {
+    var block = input.closest(".combination-block");
+    if (!block) return;
+    var panel = input.closest(".panel-chosen");
+    if (!panel) return;
+
+    var sourceText = block.dataset.sourceText || "";
+    var pairs = JSON.parse(block.dataset.mapping || "[]");
+    var mapping = buildMapping(pairs);
+
+    var chosenWords = getWordsFromPanel(panel);
+    var draft = input.value.trim().toLocaleLowerCase("tr-TR");
+    var allWords = draft ? chosenWords.concat([draft]) : chosenWords;
+
+    var result = charOverflowMasks(sourceText, allWords, mapping);
+
+    // Update preview phrase
+    var phraseEl = panel.querySelector(".chosen-phrase");
+    if (allWords.length > 0) {
+      var phraseHtml = renderPhraseHtml(allWords, result.masks);
+      if (phraseEl) {
+        phraseEl.innerHTML = phraseHtml;
+      } else {
+        phraseEl = document.createElement("div");
+        phraseEl.className = "chosen-phrase";
+        phraseEl.innerHTML = phraseHtml;
+        var h3 = panel.querySelector("h3");
+        if (h3) h3.after(phraseEl);
+      }
+    } else if (phraseEl) {
+      phraseEl.innerHTML = "";
+    }
+
+    // Update remaining letters
+    var remainingEl = block.querySelector(".panel-remaining");
+    if (remainingEl) {
+      var h3 = remainingEl.querySelector("h3");
+      var h3Html = h3 ? h3.outerHTML : '<h3>Kalan Harfler</h3>';
+      remainingEl.innerHTML = h3Html + renderRemainingHtml(result.remainingPool);
+    }
+  }
+
+  document.addEventListener("input", function (e) {
+    var input = e.target.closest(".custom-word-input");
+    if (!input) return;
+    updateLivePreview(input);
+  });
+
+  // Restore server-rendered state when input is cleared or blurred empty
+  document.addEventListener("blur", function (e) {
+    var input = e.target.closest(".custom-word-input");
+    if (!input || input.value.trim()) return;
+    updateLivePreview(input);
+  }, true);
 
   // -------------------------------------------------------------------------
   // Inline edit on double-click

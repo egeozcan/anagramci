@@ -151,7 +151,7 @@ describe("Attempt flow", () => {
     expect(body).toContain("Seçilen Kelimeler");
     // Should contain combination block
     expect(body).toContain("combination-0");
-    expect(body).toContain("Kombinasyon 1");
+    expect(body).toContain("(1)");
   });
 
   test("GET /attempts/:id for non-existent attempt returns 404", async () => {
@@ -285,7 +285,7 @@ describe("Multiple combinations", () => {
     const body = await res.text();
     // Should return the new combination block
     expect(body).toContain("combination-1");
-    expect(body).toContain("Kombinasyon 2");
+    expect(body).toContain("(2)");
   });
 
   test("POST /attempts/:id/choose works on combination 1", async () => {
@@ -316,8 +316,8 @@ describe("Multiple combinations", () => {
     const body = await res.text();
     expect(body).toContain("combination-0");
     expect(body).toContain("combination-1");
-    expect(body).toContain("Kombinasyon 1");
-    expect(body).toContain("Kombinasyon 2");
+    expect(body).toContain("(1)");
+    expect(body).toContain("(2)");
   });
 
   test("DELETE /attempts/:id/combinations/0 removes combination and re-indexes", async () => {

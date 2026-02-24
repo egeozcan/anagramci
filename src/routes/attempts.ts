@@ -102,7 +102,7 @@ function renderCombinationBlock(attempt: Attempt, ci: number): string {
     attempt.wordListId,
   );
   const suggestions = computeSuggestionsData(allResults);
-  return combinationBlock(ci, attempt.combinations[ci], remainingPool, attempt.id, attempt.combinations.length, suggestions, attempt.mappingSnapshot, attempt.sourceText);
+  return combinationBlock(ci, attempt.combinations[ci], remainingPool, attempt.id, attempt.combinations.length, suggestions, attempt.mappingSnapshot, attempt.sourceText, true);
 }
 
 
@@ -142,12 +142,16 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
   if (method === "POST" && chooseMatch) {
     const id = decodeURIComponent(chooseMatch[1]);
     const formData = await req.formData();
-    const word = (formData.get("word") as string) ?? "";
+    const word = ((formData.get("word") as string) ?? "").trim().toLocaleLowerCase("tr-TR");
     const ci = parseInt((formData.get("ci") as string) ?? "0", 10);
 
     const attempt = getAttempt(id);
     if (!attempt) {
       return html("<p>Deneme bulunamadi.</p>", 404);
+    }
+
+    if (!word) {
+      return html(renderCombinationBlock(attempt, ci));
     }
 
     const combinations = attempt.combinations.map((c) => [...c]);
@@ -277,8 +281,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       const loadMore = hasMore
         ? `<button class="btn btn-load-more"
   hx-get="/attempts/${encodeURIComponent(attempt.id)}/suggestions?q=${encodeURIComponent(query)}&page=${page + 1}&group=${groupFilter}&ci=${ci}"
-  hx-target="#suggestion-group-${ci}-${groupFilter} .suggestion-words"
-  hx-swap="beforeend">Daha fazla...</button>`
+  hx-swap="outerHTML">Daha fazla...</button>`
         : "";
 
       return html(wordChips + loadMore);

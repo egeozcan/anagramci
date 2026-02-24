@@ -1,7 +1,7 @@
 import type { Attempt } from "../store/attempts";
 import type { MappingData } from "../store/mappings";
 import type { DAWGResult } from "../dawg";
-import { buildMappingNormalizer, charOverflowMasks } from "../anagram";
+import { buildMappingNormalizer, charOverflowMasks, computeRemainingPool } from "../anagram";
 
 // ---------------------------------------------------------------------------
 // Utility
@@ -42,9 +42,44 @@ export function homePageContent(
           hour: "2-digit",
           minute: "2-digit",
         });
-        const allWords = a.combinations.flat();
-        const chosenPreview = allWords.length > 0
-          ? escapeHtml(allWords.join(" "))
+        const mapping = mappingsByList.get(a.wordListId);
+        const mappingPairs = mapping ? mapping.pairs : [];
+        const normalizer = buildMappingNormalizer(mappingPairs);
+
+        const chosenPreview = a.combinations.some(c => c.length > 0)
+          ? a.combinations.map((words) => {
+              if (words.length === 0) return "<em>boş</em>";
+              const masks = charOverflowMasks(a.sourceText, words, normalizer);
+              const wordsHtml = words.map((w, i) => {
+                const mask = masks[i];
+                if (!mask || !mask.some(Boolean)) return escapeHtml(w);
+                const chars = [...w];
+                let html = "";
+                let inOverflow = false;
+                for (let c = 0; c < chars.length; c++) {
+                  const over = mask[c];
+                  if (over && !inOverflow) { html += `<span class="chosen-phrase-overflow">`; inOverflow = true; }
+                  if (!over && inOverflow) { html += `</span>`; inOverflow = false; }
+                  html += escapeHtml(chars[c]);
+                }
+                if (inOverflow) html += `</span>`;
+                return html;
+              }).join(" ");
+              const hasOverflow = masks.some(m => m.some(Boolean));
+              const remaining = computeRemainingPool(a.sourceText, words, normalizer);
+              const hasUnused = remaining.size > 0;
+              if (!hasOverflow && !hasUnused) {
+                return `<span class="attempt-combo attempt-combo--perfect">${wordsHtml}</span>`;
+              }
+              if (hasUnused) {
+                const letters = [...remaining.entries()]
+                  .sort((a, b) => a[0].localeCompare(b[0], "tr-TR"))
+                  .flatMap(([ch, count]) => Array(count).fill(ch))
+                  .join(",");
+                return `<span class="attempt-combo">${wordsHtml}<span class="attempt-combo-remaining"> +${escapeHtml(letters)}</span></span>`;
+              }
+              return `<span class="attempt-combo">${wordsHtml}</span>`;
+            }).join(`<span class="attempt-preview-sep"> · </span>`)
           : "<em>Henüz kelime seçilmedi</em>";
 
         return `<div class="attempt-card">
@@ -162,6 +197,7 @@ export function combinationBlock(
   suggestions: SuggestionsData = { results: new Map(), totalByGroup: new Map() },
   mappingPairs: [string, string][] = [],
   sourceText: string = "",
+  open: boolean = false,
 ): string {
   const deleteBtn = totalCombinations > 1
     ? `<button class="btn btn-danger btn-sm"
@@ -171,18 +207,53 @@ export function combinationBlock(
     : "";
 
   const mappingJson = escapeHtml(JSON.stringify(mappingPairs));
+  const normalizer = buildMappingNormalizer(mappingPairs);
 
-  return `<div class="combination-block" id="combination-${ci}" data-mapping="${mappingJson}">
-  <div class="combination-header">
-    <span class="combination-label">Kombinasyon ${ci + 1}</span>
+  let summaryPreview = "";
+  if (chosenWords.length > 0) {
+    const masks = charOverflowMasks(sourceText, chosenWords, normalizer);
+    const wordsHtml = chosenWords.map((w, i) => {
+      const mask = masks[i];
+      if (!mask || !mask.some(Boolean)) return escapeHtml(w);
+      const chars = [...w];
+      let html = "";
+      let inOverflow = false;
+      for (let c = 0; c < chars.length; c++) {
+        const over = mask[c];
+        if (over && !inOverflow) { html += `<span class="chosen-phrase-overflow">`; inOverflow = true; }
+        if (!over && inOverflow) { html += `</span>`; inOverflow = false; }
+        html += escapeHtml(chars[c]);
+      }
+      if (inOverflow) html += `</span>`;
+      return html;
+    }).join(" ");
+    const hasOverflow = masks.some(m => m.some(Boolean));
+    const isPerfect = !hasOverflow && remainingPool.size === 0;
+    const perfectClass = isPerfect ? " combination-preview--perfect" : "";
+    let remainingHint = "";
+    if (remainingPool.size > 0) {
+      const letters = [...remainingPool.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], "tr-TR"))
+        .flatMap(([ch, count]) => Array(count).fill(ch))
+        .join(",");
+      remainingHint = `<span class="combination-preview-remaining"> +${escapeHtml(letters)}</span>`;
+    }
+    summaryPreview = `<span class="combination-preview${perfectClass}">${wordsHtml}${remainingHint}</span>`;
+  }
+
+  const openAttr = open ? " open" : "";
+  return `<details class="combination-block" id="combination-${ci}" data-mapping="${mappingJson}" data-source-text="${escapeHtml(sourceText)}"${openAttr}>
+  <summary class="combination-header">
+    <span class="combination-label">(${ci + 1})</span>
+    ${summaryPreview}
     ${deleteBtn}
-  </div>
+  </summary>
   <div class="combination-panels">
     ${chosenWordsPanel(chosenWords, attemptId, ci, sourceText, mappingPairs)}
     ${remainingLettersDisplay(remainingPool, ci)}
     ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci)}
   </div>
-</div>`;
+</details>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,10 +304,19 @@ ${chosenWords
 </ol>`;
   }
 
+  const customInput = `<input type="text" class="custom-word-input"
+    name="word" placeholder="Kelime yazın..."
+    hx-post="/attempts/${encodeURIComponent(attemptId)}/choose"
+    hx-target="#combination-${ci}"
+    hx-swap="outerHTML"
+    hx-trigger="keydown[key=='Enter']"
+    hx-vals='{"ci":"${ci}"}' />`;
+
   return `<div id="chosen-words-${ci}" class="panel panel-chosen" data-attempt-id="${escapeHtml(attemptId)}" data-ci="${ci}">
   <h3>Seçilen Kelimeler</h3>
   ${phrase}
   ${wordItems}
+  ${customInput}
 </div>`;
 }
 
@@ -344,8 +424,7 @@ export function suggestionsResults(
       const loadMore = hasMore
         ? `<button class="btn btn-load-more"
   hx-get="/attempts/${encodeURIComponent(attemptId)}/suggestions?q=${encodeURIComponent(query)}&page=${page + 1}&group=${letterCount}&ci=${ci}"
-  hx-target="#suggestion-group-${ci}-${letterCount} .suggestion-words"
-  hx-swap="beforeend">Daha fazla...</button>`
+  hx-swap="outerHTML">Daha fazla...</button>`
         : "";
 
       return `<details class="suggestion-group" id="suggestion-group-${ci}-${letterCount}" open>
