@@ -1,54 +1,75 @@
 /* ==========================================================================
    Anagramci - CSS Stylesheet
-   Clean, minimal, tool-focused design with blue/teal accent
+   Stone palette inspired by Anatolian stonework: Cappadocian tuff,
+   Mardin limestone, travertine, and copper patina
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
    Custom Properties
    -------------------------------------------------------------------------- */
 :root {
-  --color-bg: #f8f9fa;
-  --color-surface: #ffffff;
-  --color-border: #dee2e6;
-  --color-border-light: #e9ecef;
-  --color-text: #212529;
-  --color-text-secondary: #6c757d;
-  --color-text-muted: #adb5bd;
+  /* Surface & background */
+  --color-bg: #f0ebe3;
+  --color-bg-deep: #e5ded4;
+  --color-surface: #faf7f2;
+  --color-surface-inset: #ece6db;
 
-  --color-primary: #0d7a8a;
-  --color-primary-hover: #096370;
-  --color-primary-bg: #e6f4f6;
+  /* Text hierarchy */
+  --color-text: #2c2520;
+  --color-text-secondary: #6b5e52;
+  --color-text-muted: #9e9184;
 
-  --color-secondary: #6c757d;
-  --color-secondary-hover: #5a6268;
+  /* Borders */
+  --color-border: #c9bfb1;
+  --color-border-light: #d9d1c5;
+  --color-border-heavy: #b0a494;
 
-  --color-danger: #c0392b;
-  --color-danger-hover: #a33025;
-  --color-danger-bg: #fdecea;
+  /* Primary — copper-green patina */
+  --color-primary: #5a7c65;
+  --color-primary-hover: #4a6854;
+  --color-primary-bg: #e4ede7;
 
-  --color-warning: #e67e22;
-  --color-warning-hover: #cf6e17;
-  --color-warning-bg: #fef5e7;
+  /* Secondary — warm copper */
+  --color-copper: #a0734a;
+  --color-copper-hover: #8a6240;
+  --color-copper-bg: #f2e8dd;
 
-  --color-success: #27ae60;
-  --color-success-bg: #e8f8f0;
+  /* Semantic */
+  --color-danger: #9e4a3a;
+  --color-danger-hover: #873e31;
+  --color-danger-bg: #f5e6e3;
 
-  --color-chip-bg: #e9ecef;
-  --color-chip-hover: #dee2e6;
+  --color-warning: #b8863a;
+  --color-warning-hover: #9e7232;
+  --color-warning-bg: #f5eddf;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji";
+  --color-success: #4a8c5c;
+  --color-success-bg: #e4f0e8;
+
+  /* Chips */
+  --color-chip-bg: #e5ded4;
+  --color-chip-hover: #d9d1c5;
+
+  /* Typography */
+  --font-heading: "Bitter", Georgia, serif;
+  --font-body: "Source Sans 3", "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
     "Courier New", monospace;
 
+  /* Radii */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
+  --radius-pebble: 12px;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  /* Shadows — warm-toned */
+  --shadow-sm: 0 1px 2px rgba(44, 37, 32, 0.07);
+  --shadow-md: 0 2px 8px rgba(44, 37, 32, 0.09);
+  --shadow-lg: 0 4px 16px rgba(44, 37, 32, 0.12);
+  --shadow-inset: inset 0 1px 3px rgba(44, 37, 32, 0.1);
+  --shadow-pressed: inset 0 2px 4px rgba(44, 37, 32, 0.15);
 
+  /* Spacing */
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;
@@ -56,8 +77,16 @@
   --spacing-xl: 2rem;
   --spacing-2xl: 3rem;
 
+  /* Motion */
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+  --duration-fast: 0.12s;
+  --duration-normal: 0.2s;
+  --duration-slow: 0.35s;
+
+  /* Layout */
   --max-width: 1100px;
-  --nav-height: 52px;
+  --nav-height: 56px;
 }
 
 /* --------------------------------------------------------------------------
@@ -77,12 +106,26 @@ html {
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 1rem;
   line-height: 1.6;
   color: var(--color-text);
   background-color: var(--color-bg);
   min-height: 100vh;
+  position: relative;
+}
+
+/* Subtle noise texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
 }
 
 main {
@@ -94,6 +137,7 @@ main {
 a {
   color: var(--color-primary);
   text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
 a:hover {
@@ -101,6 +145,7 @@ a:hover {
 }
 
 h2 {
+  font-family: var(--font-heading);
   font-size: 1.35rem;
   font-weight: 600;
   color: var(--color-text);
@@ -108,6 +153,7 @@ h2 {
 }
 
 h3 {
+  font-family: var(--font-heading);
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text);
@@ -124,7 +170,7 @@ ul {
 }
 
 /* --------------------------------------------------------------------------
-   Navigation
+   Navigation — stone lintel
    -------------------------------------------------------------------------- */
 nav {
   display: flex;
@@ -133,17 +179,19 @@ nav {
   height: var(--nav-height);
   padding: 0 var(--spacing-md);
   background-color: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 2px solid var(--color-border-heavy);
+  box-shadow: 0 1px 4px rgba(44, 37, 32, 0.08);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
 nav .logo {
-  font-size: 1.1rem;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--color-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
 }
 
 nav .logo:hover {
@@ -155,57 +203,81 @@ nav a:not(.logo) {
   font-size: 0.9rem;
   color: var(--color-text-secondary);
   font-weight: 500;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
 nav a:not(.logo):hover {
   color: var(--color-primary);
+  background-color: var(--color-primary-bg);
   text-decoration: none;
 }
 
 /* --------------------------------------------------------------------------
-   Buttons
+   Buttons — tactile stone press
    -------------------------------------------------------------------------- */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0.5rem 1rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.4;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease,
-    color 0.15s ease, opacity 0.15s ease;
+  transition: background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
   white-space: nowrap;
   user-select: none;
 }
 
 .btn:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-copper);
   outline-offset: 2px;
 }
 
 .btn-primary {
   background-color: var(--color-primary);
   color: #fff;
+  box-shadow: 0 2px 0 var(--color-primary-hover);
 }
 
 .btn-primary:hover {
   background-color: var(--color-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 rgba(74, 104, 84, 0.6);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-pressed);
 }
 
 .btn-secondary {
   background-color: var(--color-surface);
   color: var(--color-text);
   border-color: var(--color-border);
+  box-shadow: 0 1px 0 var(--color-border);
 }
 
 .btn-secondary:hover {
   background-color: var(--color-bg);
-  border-color: var(--color-secondary);
+  border-color: var(--color-border-heavy);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 0 var(--color-border);
+}
+
+.btn-secondary:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-pressed);
 }
 
 .btn-danger {
@@ -217,15 +289,28 @@ nav a:not(.logo):hover {
 .btn-danger:hover {
   background-color: var(--color-danger);
   color: #fff;
+  transform: translateY(-1px);
+}
+
+.btn-danger:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-pressed);
 }
 
 .btn-warning {
   background-color: var(--color-warning);
   color: #fff;
+  box-shadow: 0 2px 0 var(--color-warning-hover);
 }
 
 .btn-warning:hover {
   background-color: var(--color-warning-hover);
+  transform: translateY(-1px);
+}
+
+.btn-warning:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-pressed);
 }
 
 .btn-sm {
@@ -247,7 +332,8 @@ nav a:not(.logo):hover {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
 .btn-remove:hover {
@@ -259,23 +345,23 @@ nav a:not(.logo):hover {
   display: inline-block;
   padding: 0.3rem 0.75rem;
   margin-top: var(--spacing-sm);
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-primary);
   background: var(--color-primary-bg);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .btn-load-more:hover {
-  background-color: #cce7eb;
+  background-color: #cfdfd4;
 }
 
 /* --------------------------------------------------------------------------
-   Form Inputs
+   Form Inputs — carved into stone
    -------------------------------------------------------------------------- */
 input[type="text"],
 input[type="search"],
@@ -284,14 +370,17 @@ textarea {
   display: block;
   width: 100%;
   padding: 0.5rem 0.75rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 0.9rem;
   line-height: 1.5;
   color: var(--color-text);
-  background-color: var(--color-surface);
+  background-color: var(--color-surface-inset);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-inset);
+  transition: border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
   appearance: none;
 }
 
@@ -299,18 +388,20 @@ input[type="text"]:focus,
 input[type="search"]:focus,
 select:focus,
 textarea:focus {
+  background-color: var(--color-surface);
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(13, 122, 138, 0.15);
+  box-shadow: 0 0 0 3px rgba(90, 124, 101, 0.15);
   outline: none;
 }
 
 input[type="text"]::placeholder,
 input[type="search"]::placeholder {
   color: var(--color-text-muted);
+  font-style: italic;
 }
 
 select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236c757d' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b5e52' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   background-size: 12px;
@@ -337,6 +428,11 @@ select {
   font-size: 0.9rem;
   font-style: italic;
   padding: var(--spacing-md) 0;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-inset);
+  text-align: center;
+  padding: var(--spacing-lg) var(--spacing-md);
 }
 
 /* --------------------------------------------------------------------------
@@ -351,16 +447,20 @@ select {
   align-items: center;
   gap: var(--spacing-sm);
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-sm);
   padding: var(--spacing-md);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .attempt-card:hover {
-  border-color: var(--color-border);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--color-border-heavy);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .attempt-card-link {
@@ -430,9 +530,11 @@ select {
    -------------------------------------------------------------------------- */
 .new-attempt {
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-copper);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .new-attempt-form {
@@ -454,13 +556,15 @@ select {
 
 .workspace-header {
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
   border-radius: var(--radius-md);
   padding: var(--spacing-md) var(--spacing-lg);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .workspace-source {
@@ -517,6 +621,12 @@ select {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.combination-block[open] {
+  box-shadow: var(--shadow-md);
 }
 
 .combination-header {
@@ -543,6 +653,7 @@ select {
   font-weight: 500;
   color: var(--color-text-muted);
   flex-shrink: 0;
+  margin-right: var(--spacing-sm);
 }
 
 .combination-label::before {
@@ -551,7 +662,7 @@ select {
   color: var(--color-text-muted);
   margin-right: var(--spacing-xs);
   display: inline-block;
-  transition: transform 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
 .combination-block[open] > .combination-header .combination-label::before {
@@ -579,10 +690,7 @@ select {
   font-weight: 400;
 }
 
-/* Hide preview when block is open since full content is visible */
-.combination-block[open] .combination-preview {
-  display: none;
-}
+/* Keep preview visible even when open — always show words */
 
 .combination-panels {
   display: grid;
@@ -607,15 +715,17 @@ select {
    -------------------------------------------------------------------------- */
 .panel {
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--spacing-md);
   min-height: 300px;
   max-height: calc(100vh - var(--nav-height) - 160px);
   overflow-y: auto;
+  box-shadow: var(--shadow-sm);
 }
 
 .panel h3 {
+  font-family: var(--font-heading);
   position: sticky;
   top: calc(-1 * var(--spacing-md));
   background-color: var(--color-surface);
@@ -630,15 +740,18 @@ select {
    Chosen Words Panel
    -------------------------------------------------------------------------- */
 .chosen-phrase {
+  font-family: var(--font-heading);
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--color-primary);
   background: var(--color-primary-bg);
+  border: 1px solid var(--color-border);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-sm);
   margin-bottom: var(--spacing-md);
   word-break: break-word;
   line-height: 1.5;
+  box-shadow: var(--shadow-inset);
 }
 
 .chosen-words-list {
@@ -651,7 +764,7 @@ select {
   justify-content: space-between;
   padding: 0.35rem var(--spacing-sm);
   border-radius: var(--radius-sm);
-  transition: background-color 0.12s ease;
+  transition: background-color var(--duration-fast) var(--ease-out);
   counter-increment: chosen;
 }
 
@@ -675,7 +788,7 @@ select {
 
 .chosen-word-item .btn-remove {
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 .chosen-word-item:hover .btn-remove {
@@ -690,19 +803,23 @@ select {
   border-radius: var(--radius-sm);
   font-size: 0.95rem;
   font-family: inherit;
-  background: var(--color-bg);
+  background: var(--color-surface-inset);
   color: var(--color-text);
   outline: none;
-  transition: border-color 0.15s ease;
+  box-shadow: var(--shadow-inset);
+  transition: border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
   box-sizing: border-box;
 }
 
 .custom-word-input:focus {
   border-color: var(--color-primary);
+  background-color: var(--color-surface);
 }
 
 .custom-word-input::placeholder {
   color: var(--color-text-muted);
+  font-style: italic;
 }
 
 /* Drag and drop */
@@ -719,37 +836,39 @@ select {
 }
 
 .chosen-word-item--drop-above {
-  border-top: 2px solid var(--color-primary);
+  border-top: 2px solid var(--color-copper);
   margin-top: -1px;
 }
 
 .chosen-word-item--drop-below {
-  border-bottom: 2px solid var(--color-primary);
+  border-bottom: 2px solid var(--color-copper);
   margin-bottom: -1px;
 }
 
 /* Overflow letters in phrase preview */
 .chosen-phrase-overflow {
   color: var(--color-danger);
+  text-decoration: wavy underline var(--color-danger);
+  text-underline-offset: 3px;
 }
 
 /* Inline edit input */
 .chosen-word-edit-input {
   flex: 1;
   padding: 0.2rem 0.4rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 0.95rem;
   color: var(--color-text);
   background-color: var(--color-surface);
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-sm);
-  box-shadow: 0 0 0 3px rgba(13, 122, 138, 0.15);
+  box-shadow: 0 0 0 3px rgba(90, 124, 101, 0.15);
   outline: none;
   margin-left: var(--spacing-xs);
 }
 
 /* --------------------------------------------------------------------------
-   Remaining Letters
+   Remaining Letters — mosaic tiles
    -------------------------------------------------------------------------- */
 .letter-chips {
   display: flex;
@@ -761,12 +880,15 @@ select {
   display: inline-flex;
   align-items: baseline;
   gap: 1px;
-  background-color: var(--color-chip-bg);
+  background: linear-gradient(135deg, var(--color-chip-bg) 0%, #ddd5c9 100%);
   color: var(--color-text);
+  font-family: var(--font-heading);
   font-size: 0.95rem;
   font-weight: 600;
   padding: 0.3rem 0.5rem 0.3rem 0.45rem;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 2px rgba(44, 37, 32, 0.1);
   line-height: 1;
   letter-spacing: 0.02em;
   /* Ensure Turkish diacritics have room */
@@ -783,10 +905,13 @@ select {
 }
 
 .letter-chip--full {
-  background-color: var(--color-success-bg);
+  background: linear-gradient(135deg, var(--color-success-bg) 0%, #cfe8d4 100%);
   color: var(--color-success);
-  outline: 1.5px solid var(--color-success);
-  transition: background-color 0.12s ease, color 0.12s ease, outline-color 0.12s ease;
+  border-color: var(--color-success);
+  box-shadow: 0 1px 2px rgba(74, 140, 92, 0.15);
+  transition: background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 
 .letter-chip--full sup {
@@ -794,10 +919,13 @@ select {
 }
 
 .letter-chip--partial {
-  background-color: var(--color-warning-bg);
+  background: linear-gradient(135deg, var(--color-warning-bg) 0%, #ede1ca 100%);
   color: var(--color-warning-hover);
-  outline: 1.5px solid var(--color-warning);
-  transition: background-color 0.12s ease, color 0.12s ease, outline-color 0.12s ease;
+  border-color: var(--color-warning);
+  box-shadow: 0 1px 2px rgba(184, 134, 58, 0.15);
+  transition: background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 
 .letter-chip--partial sup {
@@ -860,7 +988,7 @@ select {
   content: "\25B6";
   font-size: 0.6rem;
   color: var(--color-text-muted);
-  transition: transform 0.15s ease;
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
 .suggestion-group[open] > summary::before {
@@ -881,7 +1009,7 @@ select {
 }
 
 /* --------------------------------------------------------------------------
-   Word Chips (clickable suggestion words)
+   Word Chips — river pebbles
    -------------------------------------------------------------------------- */
 .word-chip-form {
   display: inline;
@@ -890,16 +1018,19 @@ select {
 .word-chip {
   display: inline-block;
   padding: 0.3rem 0.6rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--color-text);
   background-color: var(--color-chip-bg);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pebble);
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease,
-    color 0.12s ease;
+  transition: background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
   line-height: 1.3;
   /* Extra horizontal room for Turkish characters */
   letter-spacing: 0.01em;
@@ -909,11 +1040,15 @@ select {
   background-color: var(--color-primary-bg);
   border-color: var(--color-primary);
   color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(44, 37, 32, 0.1);
 }
 
 .word-chip:active {
   background-color: var(--color-primary);
   color: #fff;
+  transform: translateY(0);
+  box-shadow: var(--shadow-pressed);
 }
 
 /* --------------------------------------------------------------------------
@@ -931,23 +1066,24 @@ select {
 
 .settings-layout {
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Tab bar */
 .tab-bar {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid var(--color-border);
-  background-color: var(--color-bg);
+  border-bottom: 2px solid var(--color-border-heavy);
+  background-color: var(--color-bg-deep);
   overflow-x: auto;
 }
 
 .tab {
   padding: 0.6rem 1.2rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -956,7 +1092,9 @@ select {
   border-bottom: 2px solid transparent;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
 .tab:hover {
@@ -966,6 +1104,7 @@ select {
 .tab.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
+  background-color: var(--color-surface);
 }
 
 /* Mapping editor */
@@ -994,20 +1133,22 @@ select {
 .mapping-input {
   width: 100px;
   padding: 0.4rem 0.6rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 0.9rem;
   color: var(--color-text);
-  background-color: var(--color-surface);
+  background-color: var(--color-surface-inset);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-inset);
   text-align: center;
   /* Room for Turkish characters with diacritics */
   letter-spacing: 0.03em;
 }
 
 .mapping-input:focus {
+  background-color: var(--color-surface);
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(13, 122, 138, 0.15);
+  box-shadow: 0 0 0 3px rgba(90, 124, 101, 0.15);
   outline: none;
 }
 
@@ -1041,11 +1182,12 @@ select {
 .htmx-request {
   opacity: 0.6;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--duration-normal) var(--ease-out);
 }
 
 .htmx-indicator {
   display: none;
+  color: var(--color-copper);
 }
 
 .htmx-request .htmx-indicator,
@@ -1059,6 +1201,7 @@ select {
 @media (max-width: 768px) {
   :root {
     --max-width: 100%;
+    --nav-height: 52px;
   }
 
   main {
@@ -1152,14 +1295,15 @@ select {
 }
 
 /* --------------------------------------------------------------------------
-   Utility: Scrollbar styling (thin, subtle)
+   Utility: Scrollbar styling — warm-toned
    -------------------------------------------------------------------------- */
 .panel::-webkit-scrollbar {
   width: 6px;
 }
 
 .panel::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--color-surface-inset);
+  border-radius: 3px;
 }
 
 .panel::-webkit-scrollbar-thumb {
@@ -1175,7 +1319,7 @@ select {
    Utility: Focus visible for accessibility
    -------------------------------------------------------------------------- */
 :focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-copper);
   outline-offset: 2px;
 }
 
@@ -1188,6 +1332,20 @@ select {
    Utility: Selection
    -------------------------------------------------------------------------- */
 ::selection {
-  background-color: rgba(13, 122, 138, 0.2);
+  background-color: rgba(90, 124, 101, 0.2);
   color: var(--color-text);
+}
+
+/* --------------------------------------------------------------------------
+   Reduced Motion
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
