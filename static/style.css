@@ -487,9 +487,6 @@ select {
   font-size: 0.875rem;
   color: var(--color-text-secondary);
   margin-bottom: 0.3rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .attempt-preview em {
@@ -613,14 +610,14 @@ select {
 .combinations-container {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-sm);
 }
 
 .combination-block {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--duration-normal) var(--ease-out);
 }
@@ -633,8 +630,6 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid var(--color-border-light);
   cursor: pointer;
   user-select: none;
   list-style: none;
@@ -645,6 +640,8 @@ select {
 }
 
 .combination-block[open] > .combination-header {
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border-light);
   margin-bottom: var(--spacing-md);
 }
 
@@ -822,12 +819,26 @@ select {
   font-style: italic;
 }
 
-/* Drag and drop */
-.chosen-word-item[draggable="true"] {
+/* Drag handle */
+.drag-handle {
   cursor: grab;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.1rem 0.15rem;
+  border-radius: var(--radius-sm);
+  user-select: none;
+  flex-shrink: 0;
+  transition: color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
-.chosen-word-item[draggable="true"]:active {
+.drag-handle:hover {
+  color: var(--color-text-secondary);
+  background-color: var(--color-chip-bg);
+}
+
+.drag-handle:active {
   cursor: grabbing;
 }
 

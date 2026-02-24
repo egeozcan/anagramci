@@ -292,6 +292,7 @@ export function chosenWordsPanel(chosenWords: string[], attemptId: string, ci: n
 ${chosenWords
   .map(
     (w, i) => `  <li class="chosen-word-item" draggable="true" data-index="${i}">
+    <span class="drag-handle" title="Sürükle">⠿</span>
     <span class="chosen-word-text">${escapeHtml(w)}</span>
     <button class="btn btn-remove"
       hx-delete="/attempts/${encodeURIComponent(attemptId)}/chosen/${i}?ci=${ci}"

@@ -90,6 +90,11 @@
   // -------------------------------------------------------------------------
   var dragSrcIndex = null;
   var dragPanel = null;
+  var dragFromHandle = false;
+
+  document.addEventListener("mousedown", function (e) {
+    dragFromHandle = !!e.target.closest(".drag-handle");
+  });
 
   function clearDropIndicators(list) {
     var items = list.querySelectorAll(".chosen-word-item");
@@ -125,6 +130,11 @@
   document.addEventListener("dragstart", function (e) {
     var item = e.target.closest(".chosen-word-item[draggable]");
     if (!item) return;
+    // Only allow drag when initiated from the handle
+    if (!dragFromHandle) {
+      e.preventDefault();
+      return;
+    }
     dragSrcIndex = parseInt(item.dataset.index, 10);
     dragPanel = item.closest(".panel-chosen");
     item.classList.add("chosen-word-item--dragging");
@@ -359,6 +369,7 @@
     input.className = "chosen-word-edit-input";
     input.value = originalText;
 
+    item.draggable = false;
     span.style.display = "none";
     span.parentNode.insertBefore(input, span.nextSibling);
     input.focus();
@@ -377,6 +388,7 @@
     }
 
     function cancel() {
+      item.draggable = true;
       span.style.display = "";
       if (input.parentNode) input.parentNode.removeChild(input);
     }
