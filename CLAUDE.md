@@ -7,7 +7,7 @@ Turkish anagram solver — server-rendered with HTMX-driven partial updates.
 - **Server**: `Bun.serve` — no framework, plain request routing
 - **Frontend**: HTMX 2.0.4 + vanilla JS (`static/app.js`) + CSS custom properties (`static/style.css`)
 - **Persistence**: JSON files on disk (`data/attempts/`, `data/mappings/`)
-- **Testing**: `bun test` (52 tests across 6 files)
+- **Testing**: `bun test`
 
 ### Commands
 ```bash
@@ -49,6 +49,7 @@ word-lists/
 - **Fragment returns**: Routes return HTML fragments, HTMX swaps them into the DOM (`hx-target`, `hx-swap="outerHTML"`)
 - **Template functions**: Pure string-returning functions in `components.ts` — no template engine
 - **Event delegation**: All client JS uses `document.addEventListener` (not per-element)
+- **Drag handle**: Drag-and-drop uses a dedicated `.drag-handle` element; a `mousedown` listener tracks handle origin since `dragstart` fires on the `<li>`, not the child. Inline edit disables `draggable` on the `<li>` to allow text selection.
 - **Pool subtraction**: `textToPool(source) → subtractWord(pool, word) → remaining` — order matters for overflow detection
 - **`PUT /attempts/:id/chosen`**: Accepts `ci` + `word_0, word_1, ...` form fields, replaces full word list, returns re-rendered combination block. Used by both drag-and-drop reorder and inline edit.
 

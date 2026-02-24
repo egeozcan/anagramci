@@ -3,3 +3,6 @@ dist/
 data/
 .idea/
 *.log
+.DS_Store
+tasks/
+docs/
