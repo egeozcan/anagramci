@@ -8,6 +8,68 @@
     }
   }
 
+  function clearUnavailableMarks(block) {
+    var chips = block.querySelectorAll(".word-chip--unavailable");
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].classList.remove("word-chip--unavailable");
+    }
+  }
+
+  function readPoolFromDom(block) {
+    var pool = {};
+    var chips = block.querySelectorAll(".letter-chip[data-letter]");
+    for (var i = 0; i < chips.length; i++) {
+      var letter = chips[i].dataset.letter;
+      var count = parseInt(chips[i].querySelector("sup").textContent, 10);
+      pool[letter] = count;
+    }
+    return pool;
+  }
+
+  function subtractWordFromPool(pool, word, mapping) {
+    var result = {};
+    for (var k in pool) result[k] = pool[k];
+    var lower = word.toLocaleLowerCase("tr-TR");
+    for (var ch of lower) {
+      if (ch === " ") continue;
+      var n = mapping[ch] || ch;
+      var c = result[n] || 0;
+      if (c <= 1) { delete result[n]; } else { result[n] = c - 1; }
+    }
+    return result;
+  }
+
+  function wordFitsPool(word, pool, mapping) {
+    var needed = {};
+    var lower = word.toLocaleLowerCase("tr-TR");
+    for (var ch of lower) {
+      if (ch === " ") continue;
+      var n = mapping[ch] || ch;
+      needed[n] = (needed[n] || 0) + 1;
+    }
+    for (var k in needed) {
+      if ((pool[k] || 0) < needed[k]) return false;
+    }
+    return true;
+  }
+
+  function markUnavailableSuggestions(block, wordChip) {
+    var pool = readPoolFromDom(block);
+    var pairs = JSON.parse(block.dataset.mapping || "[]");
+    var mapping = buildMapping(pairs);
+    var hoveredWord = wordChip.textContent.toLocaleLowerCase("tr-TR");
+    var hypothetical = subtractWordFromPool(pool, hoveredWord, mapping);
+
+    var allChips = block.querySelectorAll(".word-chip");
+    for (var i = 0; i < allChips.length; i++) {
+      if (allChips[i] === wordChip) continue;
+      var w = allChips[i].textContent.toLocaleLowerCase("tr-TR");
+      if (!wordFitsPool(w, hypothetical, mapping)) {
+        allChips[i].classList.add("word-chip--unavailable");
+      }
+    }
+  }
+
   function buildMapping(pairs) {
     var map = {};
     for (var i = 0; i < pairs.length; i++) {
@@ -66,7 +128,10 @@
     // Clear old highlights
     if (activeChip) {
       var oldBlock = activeChip.closest(".combination-block");
-      if (oldBlock) clearHighlights(oldBlock);
+      if (oldBlock) {
+        clearHighlights(oldBlock);
+        clearUnavailableMarks(oldBlock);
+      }
       activeChip = null;
     }
 
@@ -74,13 +139,18 @@
 
     activeChip = wordChip;
     highlightLetters(wordChip);
+    var block = wordChip.closest(".combination-block");
+    if (block) markUnavailableSuggestions(block, wordChip);
   });
 
   // Clear when mouse leaves the document
   document.addEventListener("mouseleave", function () {
     if (activeChip) {
       var block = activeChip.closest(".combination-block");
-      if (block) clearHighlights(block);
+      if (block) {
+        clearHighlights(block);
+        clearUnavailableMarks(block);
+      }
       activeChip = null;
     }
   });
@@ -284,6 +354,8 @@
     var keys = Object.keys(pool).sort(function (a, b) {
       return a.localeCompare(b, "tr-TR");
     });
+    var total = 0;
+    for (var i = 0; i < keys.length; i++) total += pool[keys[i]];
     if (keys.length === 0) {
       return '<p class="empty-state">Kalan harf yok</p>';
     }
@@ -330,8 +402,10 @@
     // Update remaining letters
     var remainingEl = block.querySelector(".panel-remaining");
     if (remainingEl) {
-      var h3 = remainingEl.querySelector("h3");
-      var h3Html = h3 ? h3.outerHTML : '<h3>Kalan Harfler</h3>';
+      var total = 0;
+      var rKeys = Object.keys(result.remainingPool);
+      for (var ri = 0; ri < rKeys.length; ri++) total += result.remainingPool[rKeys[ri]];
+      var h3Html = '<h3>Kalan Harfler <span class="remaining-total">(' + total + ')</span></h3>';
       remainingEl.innerHTML = h3Html + renderRemainingHtml(result.remainingPool);
     }
   }
@@ -409,5 +483,119 @@
         if (input.parentNode) commit();
       }, 0);
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // Summary preview morph: rearrange chosen letters into source text on hover
+  // -------------------------------------------------------------------------
+
+  var morphedPreview = null;
+  var morphAnimations = [];
+
+  function morphPreview(previewEl) {
+    // Cancel any in-flight animations (e.g. from rapid hover/unhover)
+    for (var k = 0; k < morphAnimations.length; k++) {
+      morphAnimations[k].cancel();
+    }
+    morphAnimations = [];
+
+    var chosenLayer = previewEl.querySelector(".phrase-layer--chosen");
+    var sourceLayer = previewEl.querySelector(".phrase-layer--source");
+    if (!chosenLayer || !sourceLayer) return;
+
+    // Parse char map: "ci:si,ci:si,..."
+    var mapStr = previewEl.dataset.charMap || "";
+    var charMap = {};
+    if (mapStr) {
+      var pairs = mapStr.split(",");
+      for (var i = 0; i < pairs.length; i++) {
+        var kv = pairs[i].split(":");
+        charMap[kv[0]] = kv[1];
+      }
+    }
+
+    var chosenChars = chosenLayer.querySelectorAll(".phrase-char");
+    morphAnimations = [];
+
+    for (var i = 0; i < chosenChars.length; i++) {
+      var ci = chosenChars[i].dataset.ci;
+      var si = charMap[ci];
+      var isOverflow = chosenChars[i].classList.contains("phrase-char--overflow") || chosenChars[i].classList.contains("phrase-char--punct-overflow");
+
+      if (isOverflow) {
+        // Fade out overflow chars
+        var fadeOut = chosenChars[i].animate(
+          [{ opacity: 1 }, { opacity: 0 }],
+          { duration: 300, easing: "ease", fill: "forwards" }
+        );
+        morphAnimations.push(fadeOut);
+        continue;
+      }
+
+      if (si === undefined) continue;
+
+      var targetEl = sourceLayer.querySelector('.phrase-char[data-si="' + si + '"]');
+      if (!targetEl) continue;
+
+      var chosenRect = chosenChars[i].getBoundingClientRect();
+      var targetRect = targetEl.getBoundingClientRect();
+
+      var dx = targetRect.left - chosenRect.left;
+      var dy = targetRect.top - chosenRect.top;
+
+      var anim = chosenChars[i].animate(
+        [
+          { transform: "translate(0, 0)" },
+          { transform: "translate(" + dx + "px, " + dy + "px)" }
+        ],
+        { duration: 400, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" }
+      );
+      morphAnimations.push(anim);
+    }
+
+    // Fade in source-only chars
+    var sourceOnlyChars = sourceLayer.querySelectorAll(".phrase-char--source-only");
+    for (var j = 0; j < sourceOnlyChars.length; j++) {
+      var fadeIn = sourceOnlyChars[j].animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: 300, easing: "ease", delay: 150, fill: "forwards" }
+      );
+      morphAnimations.push(fadeIn);
+    }
+
+    previewEl.classList.add("combination-preview--morphing");
+  }
+
+  function unmorphPreview(previewEl) {
+    // Reverse all running animations so letters slide back smoothly
+    for (var i = 0; i < morphAnimations.length; i++) {
+      morphAnimations[i].reverse();
+    }
+    morphAnimations = [];
+    previewEl.classList.remove("combination-preview--morphing");
+  }
+
+  document.addEventListener("mouseover", function (e) {
+    var preview = e.target.closest(".combination-preview[data-char-map]");
+
+    if (preview === morphedPreview) return;
+
+    if (morphedPreview) {
+      unmorphPreview(morphedPreview);
+      morphedPreview = null;
+    }
+
+    if (preview) {
+      morphPreview(preview);
+      morphedPreview = preview;
+    }
+  });
+
+  // Clear morph when mouse leaves the document entirely
+  document.addEventListener("mouseleave", function () {
+    if (morphedPreview) {
+      unmorphPreview(morphedPreview);
+      morphedPreview = null;
+    }
   });
 })();

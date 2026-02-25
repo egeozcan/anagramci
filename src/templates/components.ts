@@ -1,7 +1,7 @@
 import type { Attempt } from "../store/attempts";
 import type { MappingData } from "../store/mappings";
 import type { DAWGResult } from "../dawg";
-import { buildMappingNormalizer, charOverflowMasks, computeRemainingPool } from "../anagram";
+import { buildMappingNormalizer, charOverflowMasks, computeRemainingPool, LETTER_RE } from "../anagram";
 
 // ---------------------------------------------------------------------------
 // Utility
@@ -14,6 +14,50 @@ export function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Compute a mapping from each chosen-word character index to a source-text
+ * character index.  Also identifies overflow chars (in chosen but not source)
+ * and source-only chars (in source but not chosen).
+ *
+ * Returns: { charMap: Map<chosenIdx, sourceIdx>, overflowIdxs: Set<chosenIdx>, sourceOnlyIdxs: Set<sourceIdx> }
+ */
+function computeCharMapping(
+  sourceText: string,
+  chosenWords: string[],
+  normalizer: Map<string, string>,
+): { charMap: Map<number, number>; overflowIdxs: Set<number>; sourceOnlyIdxs: Set<number> } {
+  const srcChars = [...sourceText.toLocaleLowerCase("tr-TR")].filter(c => c !== " ");
+  const chosenChars = chosenWords.flatMap(w => [...w.toLocaleLowerCase("tr-TR")]).filter(c => c !== " ");
+
+  const norm = (ch: string) => normalizer.get(ch) ?? ch;
+
+  const usedSource = new Set<number>();
+  const charMap = new Map<number, number>();
+
+  for (let ci = 0; ci < chosenChars.length; ci++) {
+    const nch = norm(chosenChars[ci]);
+    for (let si = 0; si < srcChars.length; si++) {
+      if (!usedSource.has(si) && norm(srcChars[si]) === nch) {
+        charMap.set(ci, si);
+        usedSource.add(si);
+        break;
+      }
+    }
+  }
+
+  const overflowIdxs = new Set<number>();
+  for (let ci = 0; ci < chosenChars.length; ci++) {
+    if (!charMap.has(ci)) overflowIdxs.add(ci);
+  }
+
+  const sourceOnlyIdxs = new Set<number>();
+  for (let si = 0; si < srcChars.length; si++) {
+    if (!usedSource.has(si)) sourceOnlyIdxs.add(si);
+  }
+
+  return { charMap, overflowIdxs, sourceOnlyIdxs };
 }
 
 // ---------------------------------------------------------------------------
@@ -211,25 +255,51 @@ export function combinationBlock(
 
   let summaryPreview = "";
   if (chosenWords.length > 0) {
-    const masks = charOverflowMasks(sourceText, chosenWords, normalizer);
-    const wordsHtml = chosenWords.map((w, i) => {
-      const mask = masks[i];
-      if (!mask || !mask.some(Boolean)) return escapeHtml(w);
-      const chars = [...w];
-      let html = "";
-      let inOverflow = false;
-      for (let c = 0; c < chars.length; c++) {
-        const over = mask[c];
-        if (over && !inOverflow) { html += `<span class="chosen-phrase-overflow">`; inOverflow = true; }
-        if (!over && inOverflow) { html += `</span>`; inOverflow = false; }
-        html += escapeHtml(chars[c]);
-      }
-      if (inOverflow) html += `</span>`;
-      return html;
-    }).join(" ");
-    const hasOverflow = masks.some(m => m.some(Boolean));
+    const { charMap, overflowIdxs, sourceOnlyIdxs } = computeCharMapping(sourceText, chosenWords, normalizer);
+    const hasOverflow = overflowIdxs.size > 0;
     const isPerfect = !hasOverflow && remainingPool.size === 0;
     const perfectClass = isPerfect ? " combination-preview--perfect" : "";
+
+    // Serialize mapping data
+    const mapStr = [...charMap.entries()].map(([c, s]) => `${c}:${s}`).join(",");
+    const overflowStr = [...overflowIdxs].join(",");
+    const sourceOnlyStr = [...sourceOnlyIdxs].join(",");
+
+    // Build chosen layer: each letter as an individual span
+    let globalIdx = 0;
+    const chosenHtml = chosenWords.map((w) => {
+      const chars = [...w];
+      const spans = chars.map((ch) => {
+        if (ch === " ") {
+          return '<span class="phrase-gap"> </span>';
+        }
+        const idx = globalIdx++;
+        const isOverflow = overflowIdxs.has(idx);
+        const isPunct = !LETTER_RE.test(ch);
+        const cls = isOverflow
+          ? (isPunct ? "phrase-char phrase-char--punct-overflow" : "phrase-char phrase-char--overflow")
+          : "phrase-char";
+        return `<span class="${cls}" data-ci="${idx}">${escapeHtml(ch)}</span>`;
+      });
+      return spans.join("");
+    }).join('<span class="phrase-gap"> </span>');
+
+    // Build source layer for position measurement
+    const srcChars = [...sourceText.toLocaleLowerCase("tr-TR")];
+    let srcIdx = 0;
+    const srcParts: string[] = [];
+    for (const ch of srcChars) {
+      if (ch === " ") {
+        srcParts.push('<span class="phrase-gap"> </span>');
+      } else {
+        const isSourceOnly = sourceOnlyIdxs.has(srcIdx);
+        const cls = isSourceOnly ? "phrase-char phrase-char--source-only" : "phrase-char";
+        srcParts.push(`<span class="${cls}" data-si="${srcIdx}">${escapeHtml(ch)}</span>`);
+        srcIdx++;
+      }
+    }
+    const sourceHtml = srcParts.join("");
+
     let remainingHint = "";
     if (remainingPool.size > 0) {
       const letters = [...remainingPool.entries()]
@@ -238,7 +308,17 @@ export function combinationBlock(
         .join(",");
       remainingHint = `<span class="combination-preview-remaining"> +${escapeHtml(letters)}</span>`;
     }
-    summaryPreview = `<span class="combination-preview${perfectClass}">${wordsHtml}${remainingHint}</span>`;
+
+    // Compute displacement: sum of |chosen_index - source_index| for mapped chars
+    let displacement = 0;
+    for (const [c, s] of charMap) {
+      displacement += Math.abs(c - s);
+    }
+
+    summaryPreview = `<span class="combination-preview${perfectClass}" data-char-map="${escapeHtml(mapStr)}" data-overflow="${escapeHtml(overflowStr)}" data-source-only="${escapeHtml(sourceOnlyStr)}">
+  <span class="phrase-layer phrase-layer--chosen">${chosenHtml}</span>${remainingHint}
+  <span class="phrase-layer phrase-layer--source" aria-hidden="true">${sourceHtml}</span>
+</span><span class="combination-displacement" title="Yer değiştirme">${displacement}</span>`;
   }
 
   const openAttr = open ? " open" : "";
@@ -269,7 +349,6 @@ export function chosenWordsPanel(chosenWords: string[], attemptId: string, ci: n
     ? `<div class="chosen-phrase">${chosenWords.map((w, i) => {
         const mask = masks[i];
         if (!mask || !mask.some(Boolean)) return escapeHtml(w);
-        // Render char-by-char, grouping consecutive same-state runs
         const chars = [...w];
         let html = "";
         let inOverflow = false;
@@ -328,12 +407,14 @@ ${chosenWords
 export function remainingLettersDisplay(pool: Map<string, number>, ci: number = 0): string {
   if (pool.size === 0) {
     return `<div id="remaining-letters-${ci}" class="panel panel-remaining">
-  <h3>Kalan Harfler</h3>
+  <h3>Kalan Harfler <span class="remaining-total">(0)</span></h3>
   <p class="empty-state">Kalan harf yok</p>
 </div>`;
   }
 
   const sorted = [...pool.entries()].sort((a, b) => a[0].localeCompare(b[0], "tr-TR"));
+  let total = 0;
+  for (const [, count] of sorted) total += count;
 
   const chips = sorted
     .map(
@@ -343,7 +424,7 @@ export function remainingLettersDisplay(pool: Map<string, number>, ci: number = 
     .join("");
 
   return `<div id="remaining-letters-${ci}" class="panel panel-remaining">
-  <h3>Kalan Harfler</h3>
+  <h3>Kalan Harfler <span class="remaining-total">(${total})</span></h3>
   <div class="letter-chips">${chips}</div>
 </div>`;
 }

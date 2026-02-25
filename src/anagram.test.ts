@@ -22,6 +22,17 @@ describe("textToPool", () => {
     expect(pool.has("İ")).toBe(false);
   });
 
+  test("ignores punctuation", () => {
+    const pool = textToPool("merhaba!");
+    expect(pool.has("!")).toBe(false);
+    expect(pool.get("a")).toBe(2);
+
+    const pool2 = textToPool("test? evet.");
+    expect(pool2.has("?")).toBe(false);
+    expect(pool2.has(".")).toBe(false);
+    expect(pool2.get("e")).toBe(3);
+  });
+
   test("applies letter mapping", () => {
     const mapping = new Map([["ç", "c"], ["ş", "s"]]);
     const pool = textToPool("çay şeker", mapping);

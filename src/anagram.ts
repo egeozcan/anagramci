@@ -1,3 +1,5 @@
+export const LETTER_RE = /\p{L}/u;
+
 export function buildMappingNormalizer(
   pairs: [string, string][]
 ): Map<string, string> {
@@ -23,7 +25,7 @@ export function textToPool(
   const pool = new Map<string, number>();
   const lower = text.toLocaleLowerCase("tr-TR");
   for (const ch of lower) {
-    if (ch === " ") continue;
+    if (!LETTER_RE.test(ch)) continue;
     const normalized = normalizeChar(ch, mapping);
     pool.set(normalized, (pool.get(normalized) || 0) + 1);
   }
@@ -38,7 +40,7 @@ export function subtractWord(
   const result = new Map(pool);
   const lower = word.toLocaleLowerCase("tr-TR");
   for (const ch of lower) {
-    if (ch === " ") continue;
+    if (!LETTER_RE.test(ch)) continue;
     const normalized = normalizeChar(ch, mapping);
     const count = result.get(normalized) || 0;
     if (count <= 1) {
@@ -79,7 +81,7 @@ export function charOverflowMasks(
     const used = new Map<string, number>();
     const masks: boolean[] = [];
     for (const ch of lower) {
-      if (ch === " ") {
+      if (!LETTER_RE.test(ch)) {
         masks.push(false);
         continue;
       }

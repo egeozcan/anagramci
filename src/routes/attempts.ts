@@ -114,7 +114,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
   // POST /attempts — Create new attempt
   if (method === "POST" && path === "/attempts") {
     const formData = await req.formData();
-    const sourceText = (formData.get("sourceText") as string) ?? "";
+    const sourceText = ((formData.get("sourceText") as string) ?? "").trim();
     const wordListId = (formData.get("wordListId") as string) ?? "";
 
     if (!sourceText || !wordListId) {
@@ -142,7 +142,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
   if (method === "POST" && chooseMatch) {
     const id = decodeURIComponent(chooseMatch[1]);
     const formData = await req.formData();
-    const word = ((formData.get("word") as string) ?? "").trim().toLocaleLowerCase("tr-TR");
+    const raw = ((formData.get("word") as string) ?? "").trim().toLocaleLowerCase("tr-TR");
     const ci = parseInt((formData.get("ci") as string) ?? "0", 10);
 
     const attempt = getAttempt(id);
@@ -150,13 +150,14 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       return html("<p>Deneme bulunamadi.</p>", 404);
     }
 
-    if (!word) {
+    const words = raw.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
       return html(renderCombinationBlock(attempt, ci));
     }
 
     const combinations = attempt.combinations.map((c) => [...c]);
     if (ci >= 0 && ci < combinations.length) {
-      combinations[ci].push(word);
+      combinations[ci].push(...words);
     }
     const updated = updateAttempt(id, { combinations });
 
