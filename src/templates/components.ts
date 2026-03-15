@@ -243,6 +243,9 @@ export function combinationBlock(
   sourceText: string = "",
   open: boolean = false,
 ): string {
+  let remainingLetterCount = 0;
+  for (const count of remainingPool.values()) remainingLetterCount += count;
+
   const deleteBtn = totalCombinations > 1
     ? `<button class="btn btn-danger btn-sm"
     hx-delete="/attempts/${encodeURIComponent(attemptId)}/combinations/${ci}"
@@ -331,7 +334,7 @@ export function combinationBlock(
   <div class="combination-panels">
     ${chosenWordsPanel(chosenWords, attemptId, ci, sourceText, mappingPairs)}
     ${remainingLettersDisplay(remainingPool, ci)}
-    ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci)}
+    ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci, remainingLetterCount)}
   </div>
 </details>`;
 }
@@ -440,6 +443,7 @@ export function suggestionsPanel(
   attemptId: string,
   totalByGroup: Map<number, number>,
   ci: number = 0,
+  remainingLetterCount: number = 0,
 ): string {
   const escapedQuery = escapeHtml(query);
 
@@ -456,7 +460,7 @@ export function suggestionsPanel(
   <span class="suggestions-loading htmx-indicator" id="suggestions-loading-${ci}">Aranıyor...</span>
 </div>`;
 
-  const groupsHtml = suggestionsResults(results, query, page, attemptId, totalByGroup, ci);
+  const groupsHtml = suggestionsResults(results, query, page, attemptId, totalByGroup, ci, remainingLetterCount);
 
   return `<div id="suggestions-${ci}" class="panel panel-suggestions">
   <h3>Öneriler</h3>
@@ -478,6 +482,7 @@ export function suggestionsResults(
   attemptId: string,
   totalByGroup: Map<number, number>,
   ci: number = 0,
+  remainingLetterCount: number = 0,
 ): string {
   if (results.size === 0) {
     return `<p class="empty-state">Sonuç bulunamadı.</p>`;
@@ -490,6 +495,8 @@ export function suggestionsResults(
       const total = totalByGroup.get(letterCount) ?? words.length;
       const hasMore = words.length < total;
 
+      const isCompleteGroup = remainingLetterCount > 0 && letterCount === remainingLetterCount;
+      const chipClass = isCompleteGroup ? "word-chip word-chip--complete" : "word-chip";
       const wordChips = words
         .map(
           (r) => `<form class="word-chip-form" style="display:inline"
@@ -498,7 +505,7 @@ export function suggestionsResults(
   hx-swap="outerHTML">
   <input type="hidden" name="word" value="${escapeHtml(r.word)}">
   <input type="hidden" name="ci" value="${ci}">
-  <button type="submit" class="word-chip">${escapeHtml(r.word)}</button>
+  <button type="submit" class="${chipClass}">${escapeHtml(r.word)}</button>
 </form>`,
         )
         .join("");

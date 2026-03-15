@@ -240,12 +240,14 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
     }
 
     const chosenWords = attempt.combinations[ci] ?? [];
-    const { allResults } = computeWorkspaceData(
+    const { remainingPool, allResults } = computeWorkspaceData(
       attempt.sourceText,
       chosenWords,
       attempt.mappingSnapshot,
       attempt.wordListId,
     );
+    let remainingLetterCount = 0;
+    for (const count of remainingPool.values()) remainingLetterCount += count;
 
     // Filter by query
     const filtered = filterByQuery(allResults, query);
@@ -264,6 +266,8 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       const groupResults = grouped.get(groupFilter) ?? [];
       const start = (page - 1) * PAGE_SIZE;
       const pageResults = groupResults.slice(start, start + PAGE_SIZE);
+      const isCompleteGroup = remainingLetterCount > 0 && groupFilter === remainingLetterCount;
+      const chipClass = isCompleteGroup ? "word-chip word-chip--complete" : "word-chip";
       // Return just the word chips for appending
       const wordChips = pageResults
         .map(
@@ -273,7 +277,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
   hx-swap="outerHTML">
   <input type="hidden" name="word" value="${escapeHtml(r.word)}">
   <input type="hidden" name="ci" value="${ci}">
-  <button type="submit" class="word-chip">${escapeHtml(r.word)}</button>
+  <button type="submit" class="${chipClass}">${escapeHtml(r.word)}</button>
 </form>`,
         )
         .join("");
@@ -294,7 +298,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       paginated.set(lc, arr.slice(0, PAGE_SIZE));
     }
 
-    return html(suggestionsResults(paginated, query, page, attempt.id, totalByGroup, ci));
+    return html(suggestionsResults(paginated, query, page, attempt.id, totalByGroup, ci, remainingLetterCount));
   }
 
   // POST /attempts/:id/combinations — Add a new empty combination
