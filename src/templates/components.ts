@@ -142,7 +142,7 @@ export function homePageContent(
     hx-confirm="Bu denemeyi silmek istediğinize emin misiniz?">Sil</button>
 </div>`;
       }).join("\n")
-    : `<p class="empty-state">Henüz bir deneme yok. Aşağıdan yeni bir deneme başlatın.</p>`;
+    : `<p class="empty-state">Henüz bir deneme yok. Yukarıdan yeni bir deneme başlatın.</p>`;
 
   // Build mappings JSON for the word-list-to-mappings relationship so the
   // frontend can populate the mapping dropdown when the word list changes.
@@ -155,12 +155,7 @@ export function homePageContent(
     .map((wl) => `<option value="${escapeHtml(wl.id)}">${escapeHtml(wl.name)} (${wl.wordCount} kelime)</option>`)
     .join("\n");
 
-  return `<section class="attempts-list">
-  <h2>Denemeler</h2>
-  ${attemptCards}
-</section>
-
-<section class="new-attempt">
+  return `<section class="new-attempt">
   <h2>Yeni Deneme</h2>
   <form hx-post="/attempts" hx-target=".attempts-list" hx-swap="innerHTML" class="new-attempt-form">
     <div class="form-group">
@@ -177,6 +172,11 @@ export function homePageContent(
     </div>
     <button type="submit" class="btn btn-primary">Denemeyi Başlat</button>
   </form>
+</section>
+
+<section class="attempts-list">
+  <h2>Denemeler</h2>
+  ${attemptCards}
 </section>`;
 }
 
