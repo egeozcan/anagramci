@@ -367,18 +367,21 @@
   }
 
   function updateLivePreview(input) {
-    var block = input.closest(".combination-block");
-    if (!block) return;
     var panel = input.closest(".panel-chosen");
     if (!panel) return;
+    var chosenWords = getWordsFromPanel(panel);
+    var draft = input.value.trim().toLocaleLowerCase("tr-TR");
+    renderLivePreview(panel, draft ? chosenWords.concat([draft]) : chosenWords);
+  }
+
+  // Re-render the chosen phrase + remaining letters for an arbitrary word list
+  function renderLivePreview(panel, allWords) {
+    var block = panel.closest(".combination-block");
+    if (!block) return;
 
     var sourceText = block.dataset.sourceText || "";
     var pairs = JSON.parse(block.dataset.mapping || "[]");
     var mapping = buildMapping(pairs);
-
-    var chosenWords = getWordsFromPanel(panel);
-    var draft = input.value.trim().toLocaleLowerCase("tr-TR");
-    var allWords = draft ? chosenWords.concat([draft]) : chosenWords;
 
     var result = charOverflowMasks(sourceText, allWords, mapping);
 
@@ -465,7 +468,18 @@
       item.draggable = true;
       span.style.display = "";
       if (input.parentNode) input.parentNode.removeChild(input);
+      renderLivePreview(panel, getWordsFromPanel(panel));
     }
+
+    // Live-update phrase + remaining letters while editing
+    input.addEventListener("input", function () {
+      var words = getWordsFromPanel(panel);
+      var idx = parseInt(item.dataset.index, 10);
+      var draft = input.value.trim().toLocaleLowerCase("tr-TR");
+      if (draft) words[idx] = draft;
+      else words.splice(idx, 1);
+      renderLivePreview(panel, words);
+    });
 
     input.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter") {
