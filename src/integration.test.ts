@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { rmSync, mkdirSync } from "fs";
+import { rmSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { loadWordLists } from "./store/wordlists";
 import { handlePageRoute } from "./routes/pages";
@@ -455,5 +455,99 @@ describe("404 handling", () => {
   test("unknown route returns 404", async () => {
     const res = await fetch(`${BASE}/nonexistent-page`);
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tamamla (fill the rest) + hidden words
+// ---------------------------------------------------------------------------
+
+describe("Tamamla", () => {
+  let attemptId: string;
+  const hiddenFile = "data/hidden/turkce_kelime_listesi.json";
+  const hiddenFileExisted = existsSync(hiddenFile);
+  afterAll(() => {
+    if (!hiddenFileExisted) rmSync(hiddenFile, { force: true });
+  });
+  const words = (body: string) => [...body.matchAll(/data-words="([^"]*)"/g)].map((m) => m[1]);
+
+  beforeAll(async () => {
+    const form = new FormData();
+    form.set("sourceText", "hayat güzel sevince");
+    form.set("wordListId", "turkce_kelime_listesi");
+    const res = await fetch(`${BASE}/attempts`, { method: "POST", body: form, redirect: "manual" });
+    attemptId = decodeURIComponent(res.headers.get("HX-Redirect")!.replace("/attempts/", ""));
+    createdAttemptIds.push(attemptId);
+  });
+
+  test("workspace page renders a lazy placeholder", async () => {
+    const body = await (await fetch(`${BASE}/attempts/${attemptId}`)).text();
+    expect(body).toContain(`hx-get="/attempts/${attemptId}/fill?ci=0"`);
+    expect(body).toContain("Hesaplanıyor");
+  });
+
+  test("GET /fill returns solutions grouped by word count", async () => {
+    const body = await (await fetch(`${BASE}/attempts/${attemptId}/fill?ci=0`)).text();
+    expect(body).toContain('class="fill-row"');
+    expect(body).toMatch(/data-k="2"/);
+    expect(words(body).length).toBeGreaterThan(0);
+  });
+
+  test("choosing a word re-renders the block with updated solutions", async () => {
+    const form = new FormData();
+    form.set("word", "hayalet");
+    form.set("ci", "0");
+    const body = await (await fetch(`${BASE}/attempts/${attemptId}/choose`, { method: "POST", body: form })).text();
+    expect(body).toContain('data-phrase="hayalet ');
+    // every solution phrase starts with the chosen word
+    for (const m of body.matchAll(/data-phrase="([^"]*)"/g)) expect(m[1].startsWith("hayalet ")).toBe(true);
+  });
+
+  test("adding a whole solution completes the combination", async () => {
+    const fillBody = await (await fetch(`${BASE}/attempts/${attemptId}/fill?ci=0`)).text();
+    const first = fillBody.match(/aria-label="Tümünü ekle: ([^"]*)"/)![1];
+    const form = new FormData();
+    form.set("word", first);
+    form.set("ci", "0");
+    const body = await (await fetch(`${BASE}/attempts/${attemptId}/choose`, { method: "POST", body: form })).text();
+    expect(body).toContain("combination-preview--perfect");
+    expect(body).toContain("fill-section--empty");
+  });
+
+  test("hide removes a word from fill + suggestions for all blocks; unhide restores", async () => {
+    // reset to a single chosen word
+    const reset = new FormData();
+    reset.set("ci", "0");
+    reset.set("word_0", "hayalet");
+    await fetch(`${BASE}/attempts/${attemptId}/chosen`, { method: "PUT", body: reset });
+
+    const before = await (await fetch(`${BASE}/attempts/${attemptId}/fill?ci=0`)).text();
+    const target = words(before)[0].split(" ")[0];
+
+    const hide = new FormData();
+    hide.set("word", target);
+    hide.set("open", "0");
+    const hidden = await (await fetch(`${BASE}/attempts/${attemptId}/hide`, { method: "POST", body: hide })).text();
+    try {
+      expect(hidden).toContain('id="combination-0"');
+      expect(hidden).toContain("Gizlenenler (");
+      expect(words(hidden).flatMap((w) => w.split(" "))).not.toContain(target);
+      expect(hidden).not.toContain(`<button type="submit" class="word-chip">${target}</button>`);
+    } finally {
+      const restored = await (
+        await fetch(`${BASE}/attempts/${attemptId}/hide?word=${encodeURIComponent(target)}&open=0`, { method: "DELETE" })
+      ).text();
+      expect(words(restored).flatMap((w) => w.split(" "))).toContain(target);
+    }
+  });
+});
+
+describe("Validation", () => {
+  test("POST /attempts rejects unknown word list ids", async () => {
+    const form = new FormData();
+    form.set("sourceText", "abc");
+    form.set("wordListId", "../../package");
+    const res = await fetch(`${BASE}/attempts`, { method: "POST", body: form, redirect: "manual" });
+    expect(res.status).toBe(400);
   });
 });

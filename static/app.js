@@ -598,4 +598,166 @@
       morphedPreview = null;
     }
   });
+  // -------------------------------------------------------------------------
+  // Tamamla (fill the rest)
+  // -------------------------------------------------------------------------
+
+  function blockIndex(block) {
+    return parseInt(block.id.replace("combination-", ""), 10);
+  }
+
+  // Hide/unhide re-renders every block: tell the server which ones are open,
+  // and remember each open block's search query so it can be restored.
+  var pendingQueries = null;
+  document.addEventListener("htmx:configRequest", function (e) {
+    var elt = e.detail.elt;
+    if (!elt || !elt.hasAttribute || !elt.hasAttribute("data-all-blocks")) return;
+    var open = [];
+    pendingQueries = {};
+    var blocks = document.querySelectorAll(".combination-block");
+    for (var i = 0; i < blocks.length; i++) {
+      var ci = blockIndex(blocks[i]);
+      if (blocks[i].open) open.push(ci);
+      var input = blocks[i].querySelector(".suggestions-search input");
+      if (input && input.value.trim()) pendingQueries[ci] = input.value;
+    }
+    e.detail.parameters.open = open.join(",");
+  });
+
+  function dropPendingQueries() { pendingQueries = null; }
+  document.addEventListener("htmx:responseError", dropPendingQueries);
+  document.addEventListener("htmx:sendError", dropPendingQueries);
+
+  document.addEventListener("htmx:afterSettle", function (e) {
+    if (!pendingQueries || !e.detail.target.classList.contains("combinations-container")) return;
+    var queries = pendingQueries;
+    pendingQueries = null;
+    for (var ci in queries) {
+      var block = document.getElementById("combination-" + ci);
+      if (!block) continue;
+      var input = block.querySelector(".suggestions-search input");
+      if (!input) continue;
+      input.value = queries[ci];
+      htmx.ajax("GET", input.getAttribute("hx-get"), {
+        target: "#suggestions-results-" + ci,
+        swap: "innerHTML",
+        values: { q: queries[ci] },
+      });
+      applyFillFilter(block, queries[ci]);
+    }
+  });
+
+  // Filter fill rows by the search query (mapping-normalized substring).
+  function normalizeWithMapping(str, mapping) {
+    var out = "";
+    for (var ch of str.toLocaleLowerCase("tr-TR")) out += mapping[ch] || ch;
+    return out;
+  }
+
+  function applyFillFilter(block, query) {
+    var section = block.querySelector(".fill-section");
+    if (!section) return;
+    var mapping = buildMapping(JSON.parse(block.dataset.mapping || "[]"));
+    var q = normalizeWithMapping(query.trim(), mapping);
+    var groups = section.querySelectorAll(".fill-group");
+    var anyVisible = false;
+    for (var g = 0; g < groups.length; g++) {
+      var rows = groups[g].querySelectorAll(".fill-row");
+      var visible = 0;
+      for (var r = 0; r < rows.length; r++) {
+        var words = normalizeWithMapping(rows[r].dataset.words || "", mapping);
+        var match = !q || words.indexOf(q) !== -1;
+        rows[r].classList.toggle("fill-row--filtered-out", !match);
+        if (match) visible++;
+      }
+      groups[g].classList.toggle("fill-group--filtering", !!q);
+      groups[g].hidden = q && visible === 0;
+      var count = groups[g].querySelector(".fill-count");
+      if (count) {
+        if (!count.dataset.total) count.dataset.total = count.textContent;
+        count.textContent = q ? visible : count.dataset.total;
+      }
+      if (q && visible > 0) groups[g].open = true;
+      if (visible > 0) anyVisible = true;
+    }
+    var noMatch = section.querySelector(".fill-no-match");
+    if (noMatch) noMatch.hidden = !q || anyVisible || groups.length === 0;
+  }
+
+  document.addEventListener("input", function (e) {
+    var input = e.target.closest(".suggestions-search input");
+    if (!input) return;
+    var block = input.closest(".combination-block");
+    if (block) applyFillFilter(block, input.value);
+  });
+
+  // A lazily loaded fill section should respect an already-typed query.
+  document.addEventListener("htmx:afterSwap", function (e) {
+    var t = e.detail.target;
+    if (!t || !t.classList || !t.classList.contains("fill-section")) return;
+    var block = document.getElementById(t.id.replace("fill-", "combination-"));
+    var input = block && block.querySelector(".suggestions-search input");
+    if (input && input.value.trim()) applyFillFilter(block, input.value);
+  });
+
+  document.addEventListener("click", function (e) {
+    var more = e.target.closest(".fill-more");
+    if (!more) return;
+    var group = more.closest(".fill-group");
+    if (group) group.classList.add("fill-group--expanded");
+  });
+
+  // Hover: row → whole-phrase preview in the summary; token → letter highlight.
+  var activeFillRow = null;
+  var activeFillWord = null;
+
+  function clearFillRow() {
+    if (!activeFillRow) return;
+    var block = activeFillRow.closest(".combination-block");
+    if (block) block.classList.remove("combination-block--fill-preview");
+    activeFillRow = null;
+  }
+
+  function clearFillWord() {
+    if (!activeFillWord) return;
+    var block = activeFillWord.closest(".combination-block");
+    if (block) clearHighlights(block);
+    activeFillWord = null;
+  }
+
+  document.addEventListener("mouseover", function (e) {
+    var row = e.target.closest(".fill-row");
+    if (row !== activeFillRow) {
+      clearFillRow();
+      if (row) {
+        var block = row.closest(".combination-block");
+        var preview = block && block.querySelector(".combination-fill-preview");
+        if (preview) {
+          preview.textContent = row.dataset.phrase;
+          block.classList.add("combination-block--fill-preview");
+          activeFillRow = row;
+        }
+      }
+    }
+
+    var word = e.target.closest(".fill-word");
+    if (word !== activeFillWord) {
+      clearFillWord();
+      if (word) {
+        activeFillWord = word;
+        highlightLetters(word);
+      }
+    }
+  });
+
+  document.addEventListener("mouseleave", function () {
+    clearFillRow();
+    clearFillWord();
+  });
+
+  // Swapped-out elements can't receive mouseover-out; reset before any swap.
+  document.addEventListener("htmx:beforeSwap", function () {
+    clearFillRow();
+    clearFillWord();
+  });
 })();

@@ -6,7 +6,7 @@ Turkish anagram solver — server-rendered with HTMX-driven partial updates.
 - **Runtime**: Bun (native TypeScript, no bundler)
 - **Server**: `Bun.serve` — no framework, plain request routing
 - **Frontend**: HTMX 2.0.4 + vanilla JS (`static/app.js`) + CSS custom properties (`static/style.css`)
-- **Persistence**: JSON files on disk (`data/attempts/`, `data/mappings/`)
+- **Persistence**: JSON files on disk (`data/attempts/`, `data/mappings/`, `data/hidden/`)
 - **Testing**: `bun test`
 
 ### Commands
@@ -21,6 +21,7 @@ src/
   index.ts                     # Entry point, server setup
   anagram.ts                   # Pool math: textToPool, subtractWord, charOverflowMasks
   dawg.ts                      # DAWG trie for word search
+  fill.ts                      # "Tamamla": full multi-word anagrams of remaining letters
   routes/
     pages.ts                   # GET routes for pages + static files
     attempts.ts                # Attempt CRUD + word manipulation
@@ -28,6 +29,7 @@ src/
   store/
     attempts.ts                # Attempt persistence (JSON)
     mappings.ts                # Letter mapping persistence (JSON)
+    hidden.ts                  # Hidden (junk) words per word list (JSON)
     wordlists.ts               # In-memory word list loader + DAWG build
   templates/
     layout.ts                  # HTML shell with nav
@@ -52,6 +54,8 @@ word-lists/
 - **Drag handle**: Drag-and-drop uses a dedicated `.drag-handle` element; a `mousedown` listener tracks handle origin since `dragstart` fires on the `<li>`, not the child. Inline edit disables `draggable` on the `<li>` to allow text selection.
 - **Pool subtraction**: `textToPool(source) → subtractWord(pool, word) → remaining` — order matters for overflow detection
 - **`PUT /attempts/:id/chosen`**: Accepts `ci` + `word_0, word_1, ...` form fields, replaces full word list, returns re-rendered combination block. Used by both drag-and-drop reorder and inline edit.
+- **Tamamla (fill)**: `findFullAnagrams(candidates, pool, mapping)` groups candidates by letter signature (anagram alternatives share a slot), iterates word count k=1..6, and the last word of each tuple is a hash lookup of the leftover signature. 80ms budget. Rendered inline by `renderCombinationBlock` for open blocks; closed blocks / page load get a lazy `hx-trigger="intersect once"` placeholder → `GET /attempts/:id/fill?ci=`.
+- **Hidden words**: per word list, filtered out of candidates in `computeWorkspaceData` (affects suggestions and Tamamla). `POST`/`DELETE /attempts/:id/hide` re-render *all* blocks; elements with `data-all-blocks` get an `open=` param (open block indices) added client-side in `htmx:configRequest`.
 
 ### Critical Conventions
 - **Turkish locale**: Always `toLocaleLowerCase("tr-TR")` — never bare `.toLowerCase()` (İ→i, not I)

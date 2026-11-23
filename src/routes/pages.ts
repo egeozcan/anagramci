@@ -1,8 +1,7 @@
 import { listAttempts, getAttempt } from "../store/attempts";
 import { listWordLists, getWordList } from "../store/wordlists";
 import { listMappings, getMappings } from "../store/mappings";
-import { buildMappingNormalizer, computeRemainingPool } from "../anagram";
-import type { DAWGResult } from "../dawg";
+import { computeWorkspaceData, computeSuggestionsData } from "./attempts";
 import { layout } from "../templates/layout";
 import {
   homePageContent,
@@ -11,8 +10,6 @@ import {
 } from "../templates/components";
 import type { SuggestionsData } from "../templates/components";
 import type { MappingData } from "../store/mappings";
-
-const PAGE_SIZE = 50;
 
 function html(body: string, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(body, {
@@ -65,35 +62,18 @@ export function handlePageRoute(req: Request): Response | null {
     const wordList = getWordList(attempt.wordListId);
     const wordListName = wordList ? wordList.name : "Bilinmeyen liste";
 
-    const mapping = buildMappingNormalizer(attempt.mappingSnapshot);
     const remainingPools: Map<string, number>[] = [];
     const suggestionsPerCombination: SuggestionsData[] = [];
-
     for (const chosenWords of attempt.combinations) {
-      const pool = computeRemainingPool(attempt.sourceText, chosenWords, mapping);
-      remainingPools.push(pool);
-
-      let allResults: DAWGResult[] = [];
-      if (wordList) {
-        allResults = wordList.dawg.findAvailable(pool, mapping);
-      }
-      // Re-compute pool (findAvailable may mutate internally)
-      const freshPool = computeRemainingPool(attempt.sourceText, chosenWords, mapping);
-      remainingPools[remainingPools.length - 1] = freshPool;
-
-      const grouped = new Map<number, DAWGResult[]>();
-      for (const r of allResults) {
-        let arr = grouped.get(r.letterCount);
-        if (!arr) { arr = []; grouped.set(r.letterCount, arr); }
-        arr.push(r);
-      }
-      const totalByGroup = new Map<number, number>();
-      const paginated = new Map<number, DAWGResult[]>();
-      for (const [lc, arr] of grouped) {
-        totalByGroup.set(lc, arr.length);
-        paginated.set(lc, arr.slice(0, PAGE_SIZE));
-      }
-      suggestionsPerCombination.push({ results: paginated, totalByGroup });
+      // Tamamla is lazy-loaded per block on page load (see fillSection placeholder).
+      const { remainingPool, allResults, hiddenWords } = computeWorkspaceData(
+        attempt.sourceText,
+        chosenWords,
+        attempt.mappingSnapshot,
+        attempt.wordListId,
+      );
+      remainingPools.push(remainingPool);
+      suggestionsPerCombination.push(computeSuggestionsData(allResults, hiddenWords));
     }
 
     // Check if mapping is stale

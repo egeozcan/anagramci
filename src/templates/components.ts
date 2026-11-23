@@ -1,6 +1,7 @@
 import type { Attempt } from "../store/attempts";
 import type { MappingData } from "../store/mappings";
 import type { DAWGResult } from "../dawg";
+import type { FillResult, FillSolution } from "../fill";
 import { buildMappingNormalizer, charOverflowMasks, computeRemainingPool, LETTER_RE } from "../anagram";
 
 // ---------------------------------------------------------------------------
@@ -230,6 +231,9 @@ export function workspaceContent(
 export interface SuggestionsData {
   results: Map<number, DAWGResult[]>;
   totalByGroup: Map<number, number>;
+  hiddenWords?: string[];
+  /** Tamamla solutions; undefined renders a lazy-loading placeholder. */
+  fill?: FillResult;
 }
 
 export function combinationBlock(
@@ -329,12 +333,13 @@ export function combinationBlock(
   <summary class="combination-header">
     <span class="combination-label">(${ci + 1})</span>
     ${summaryPreview}
+    <span class="combination-fill-preview" aria-hidden="true"></span>
     ${deleteBtn}
   </summary>
   <div class="combination-panels">
     ${chosenWordsPanel(chosenWords, attemptId, ci, sourceText, mappingPairs)}
     ${remainingLettersDisplay(remainingPool, ci)}
-    ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci, remainingLetterCount)}
+    ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci, remainingLetterCount, fillSection(suggestions.fill, remainingPool, chosenWords, attemptId, ci), suggestions.hiddenWords ?? [])}
   </div>
 </details>`;
 }
@@ -444,6 +449,8 @@ export function suggestionsPanel(
   totalByGroup: Map<number, number>,
   ci: number = 0,
   remainingLetterCount: number = 0,
+  fillHtml: string = "",
+  hiddenWords: string[] = [],
 ): string {
   const escapedQuery = escapeHtml(query);
 
@@ -464,7 +471,9 @@ export function suggestionsPanel(
 
   return `<div id="suggestions-${ci}" class="panel panel-suggestions">
   <h3>Öneriler</h3>
+  ${hiddenWordsBar(hiddenWords, attemptId)}
   ${searchBox}
+  ${fillHtml}
   <div id="suggestions-results-${ci}" class="suggestion-groups">
     ${groupsHtml}
   </div>
@@ -496,19 +505,7 @@ export function suggestionsResults(
       const hasMore = words.length < total;
 
       const isCompleteGroup = remainingLetterCount > 0 && letterCount === remainingLetterCount;
-      const chipClass = isCompleteGroup ? "word-chip word-chip--complete" : "word-chip";
-      const wordChips = words
-        .map(
-          (r) => `<form class="word-chip-form" style="display:inline"
-  hx-post="/attempts/${encodeURIComponent(attemptId)}/choose"
-  hx-target="#combination-${ci}"
-  hx-swap="outerHTML">
-  <input type="hidden" name="word" value="${escapeHtml(r.word)}">
-  <input type="hidden" name="ci" value="${ci}">
-  <button type="submit" class="${chipClass}">${escapeHtml(r.word)}</button>
-</form>`,
-        )
-        .join("");
+      const wordChips = words.map((r) => wordChipForm(r.word, attemptId, ci, isCompleteGroup)).join("");
 
       const loadMore = hasMore
         ? `<button class="btn btn-load-more"
@@ -525,6 +522,169 @@ export function suggestionsResults(
 </details>`;
     })
     .join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Word chips, hide buttons, hidden words bar
+// ---------------------------------------------------------------------------
+
+/** hx-vals attribute value (JSON, HTML-escaped). */
+function hxVals(vals: Record<string, string>): string {
+  return escapeHtml(JSON.stringify(vals));
+}
+
+/** × button that hides a word for the whole word list; re-renders all blocks. */
+function hideButton(word: string, attemptId: string, extraClass = ""): string {
+  return `<button type="button" class="btn-hide${extraClass ? " " + extraClass : ""}" data-all-blocks
+  hx-post="/attempts/${encodeURIComponent(attemptId)}/hide"
+  hx-vals="${hxVals({ word })}"
+  hx-target=".combinations-container"
+  hx-swap="innerHTML"
+  title="Bu kelimeyi gizle"
+  aria-label="Gizle: ${escapeHtml(word)}">&times;</button>`;
+}
+
+/** A clickable suggestion chip that adds `word` to combination `ci`, with a hover-revealed hide ×. */
+export function wordChipForm(word: string, attemptId: string, ci: number, complete = false): string {
+  const chipClass = complete ? "word-chip word-chip--complete" : "word-chip";
+  return `<form class="word-chip-form"
+  hx-post="/attempts/${encodeURIComponent(attemptId)}/choose"
+  hx-target="#combination-${ci}"
+  hx-swap="outerHTML">
+  <input type="hidden" name="word" value="${escapeHtml(word)}">
+  <input type="hidden" name="ci" value="${ci}">
+  <button type="submit" class="${chipClass}">${escapeHtml(word)}</button>${hideButton(word, attemptId)}
+</form>`;
+}
+
+function hiddenWordsBar(hiddenWords: string[], attemptId: string): string {
+  if (hiddenWords.length === 0) return "";
+  const chips = hiddenWords
+    .map((w) => `<button type="button" class="hidden-word-chip" data-all-blocks
+  hx-delete="/attempts/${encodeURIComponent(attemptId)}/hide"
+  hx-vals="${hxVals({ word: w })}"
+  hx-target=".combinations-container"
+  hx-swap="innerHTML"
+  title="Tekrar göster"
+  aria-label="Tekrar göster: ${escapeHtml(w)}">${escapeHtml(w)}</button>`)
+    .join("");
+  return `<details class="hidden-words">
+  <summary>Gizlenenler (${hiddenWords.length})</summary>
+  <p class="hidden-words-hint">Geri getirmek için tıklayın.</p>
+  <div class="hidden-words-list">${chips}</div>
+</details>`;
+}
+
+// ---------------------------------------------------------------------------
+// Tamamla (fill the rest)
+// ---------------------------------------------------------------------------
+
+const FILL_VISIBLE_ROWS = 5;
+
+function fillRow(sol: FillSolution, chosenWords: string[], attemptId: string, ci: number): string {
+  const primary = sol.slots.map((s) => s.words[0]);
+  const solText = primary.join(" ");
+  const phrase = [...chosenWords, ...primary].join(" ");
+  const allWords = sol.slots.flatMap((s) => s.words).join(" ");
+  const chooseAttrs = (word: string) => `hx-post="/attempts/${encodeURIComponent(attemptId)}/choose"
+    hx-vals="${hxVals({ word, ci: String(ci) })}"
+    hx-target="#combination-${ci}"
+    hx-swap="outerHTML"`;
+
+  const slots = sol.slots
+    .map((slot) => {
+      const tokens = slot.words
+        .map((w) => `<span class="fill-token"><button type="button" class="fill-word" ${chooseAttrs(w)} title="Sadece bu kelimeyi ekle">${escapeHtml(w)}</button>${hideButton(w, attemptId, "btn-hide--fill")}</span>`)
+        .join('<span class="fill-alt-sep">/</span>');
+      return `<span class="fill-slot">${tokens}</span>`;
+    })
+    .join("");
+
+  return `<div class="fill-row" role="group" aria-label="${escapeHtml(solText)}" data-phrase="${escapeHtml(phrase)}" data-words="${escapeHtml(allWords)}">
+  <button type="button" class="fill-all" ${chooseAttrs(solText)} title="Tüm kelimeleri ekle" aria-label="Tümünü ekle: ${escapeHtml(solText)}">hepsi</button>
+  ${slots}
+</div>`;
+}
+
+/**
+ * Tamamla section: complete multi-word solutions for the remaining letters,
+ * grouped by word count. `fill === undefined` renders a lazy placeholder that
+ * loads when it scrolls into view (e.g. when a closed block is opened).
+ */
+export function fillSection(
+  fill: FillResult | undefined,
+  remainingPool: Map<string, number>,
+  chosenWords: string[],
+  attemptId: string,
+  ci: number,
+  minLen = 3,
+): string {
+  let remaining = 0;
+  for (const c of remainingPool.values()) remaining += c;
+  const id = `fill-${ci}`;
+  if (remaining === 0) return `<div id="${id}" class="fill-section fill-section--empty"></div>`;
+
+  if (!fill) {
+    return `<div id="${id}" class="fill-section"
+  hx-get="/attempts/${encodeURIComponent(attemptId)}/fill?ci=${ci}"
+  hx-trigger="intersect once"
+  hx-swap="outerHTML">
+  <h4 class="fill-title">Tamamla</h4>
+  <p class="empty-state fill-loading">Hesaplanıyor…</p>
+</div>`;
+  }
+
+  const title = `<h4 class="fill-title">Tamamla <span class="suggestion-count">· kalan harflerin tamamını kullanan çözümler</span></h4>`;
+
+  if (remaining < minLen) {
+    return `<div id="${id}" class="fill-section">${title}<p class="empty-state">Kalan harflerle (min. ${minLen} harf) tamamlanamıyor.</p></div>`;
+  }
+  if (fill.solutions.length === 0) {
+    const msg = fill.truncated
+      ? "Süre içinde tam çözüm bulunamadı — bir kelime seçerek aramayı daraltın."
+      : "Tam çözüm bulunamadı — bir kelimeyi değiştirmeyi deneyin.";
+    return `<div id="${id}" class="fill-section">${title}<p class="empty-state">${msg}</p></div>`;
+  }
+
+  const byK = new Map<number, FillSolution[]>();
+  for (const sol of fill.solutions) {
+    const k = sol.slots.length;
+    if (!byK.has(k)) byK.set(k, []);
+    byK.get(k)!.push(sol);
+  }
+  const ks = [...byK.keys()].sort((a, b) => a - b);
+  const lastK = ks[ks.length - 1];
+  // Open the smallest group; if that's single words (also shown as complete
+  // suggestions below), open the first multi-word group as well.
+  const openUpTo = ks.find((k) => k >= 2) ?? ks[0];
+
+  const groups = ks
+    .map((k) => {
+      const sols = byK.get(k)!;
+      const plus = fill.truncated && k === lastK ? "+" : "";
+      const rows = sols
+        .map((sol, i) => {
+          const row = fillRow(sol, chosenWords, attemptId, ci);
+          return i < FILL_VISIBLE_ROWS ? row : row.replace('class="fill-row"', 'class="fill-row fill-row--extra"');
+        })
+        .join("\n");
+      const extra = sols.length - FILL_VISIBLE_ROWS;
+      const more = extra > 0 ? `<button type="button" class="btn btn-load-more fill-more">Daha fazla (${extra})</button>` : "";
+      return `<details class="suggestion-group fill-group" data-k="${k}"${k <= openUpTo ? " open" : ""}>
+  <summary>${k} kelime <span class="suggestion-count">(<span class="fill-count">${sols.length}</span>${plus})</span></summary>
+  <div class="fill-rows">
+    ${rows}
+    ${more}
+  </div>
+</details>`;
+    })
+    .join("\n");
+
+  return `<div id="${id}" class="fill-section">
+  ${title}
+  ${groups}
+  <p class="empty-state fill-no-match" hidden>İlk sonuçlarda yok — kelimeyi seçip tamamlayın.</p>
+</div>`;
 }
 
 // ---------------------------------------------------------------------------
