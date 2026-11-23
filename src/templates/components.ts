@@ -232,6 +232,8 @@ export interface SuggestionsData {
   results: Map<number, DAWGResult[]>;
   totalByGroup: Map<number, number>;
   hiddenWords?: string[];
+  /** Words banned for this combination only. */
+  bannedWords?: string[];
   /** Tamamla solutions; undefined renders a lazy-loading placeholder. */
   fill?: FillResult;
 }
@@ -339,7 +341,7 @@ export function combinationBlock(
   <div class="combination-panels">
     ${chosenWordsPanel(chosenWords, attemptId, ci, sourceText, mappingPairs)}
     ${remainingLettersDisplay(remainingPool, ci)}
-    ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci, remainingLetterCount, fillSection(suggestions.fill, remainingPool, chosenWords, attemptId, ci), suggestions.hiddenWords ?? [])}
+    ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci, remainingLetterCount, fillSection(suggestions.fill, remainingPool, chosenWords, attemptId, ci), suggestions.hiddenWords ?? [], suggestions.bannedWords ?? [])}
   </div>
 </details>`;
 }
@@ -451,6 +453,7 @@ export function suggestionsPanel(
   remainingLetterCount: number = 0,
   fillHtml: string = "",
   hiddenWords: string[] = [],
+  bannedWords: string[] = [],
 ): string {
   const escapedQuery = escapeHtml(query);
 
@@ -472,6 +475,7 @@ export function suggestionsPanel(
   return `<div id="suggestions-${ci}" class="panel panel-suggestions">
   <h3>Öneriler</h3>
   ${hiddenWordsBar(hiddenWords, attemptId)}
+  ${bannedWordsBar(bannedWords, attemptId, ci)}
   ${searchBox}
   ${fillHtml}
   <div id="suggestions-results-${ci}" class="suggestion-groups">
@@ -540,11 +544,25 @@ function hideButton(word: string, attemptId: string, extraClass = ""): string {
   hx-vals="${hxVals({ word })}"
   hx-target=".combinations-container"
   hx-swap="innerHTML"
-  title="Bu kelimeyi gizle"
-  aria-label="Gizle: ${escapeHtml(word)}">&times;</button>`;
+  data-tip="her yerde gizle"
+  aria-label="Her yerde gizle: ${escapeHtml(word)}">&times;</button>`;
 }
 
-/** A clickable suggestion chip that adds `word` to combination `ci`, with a hover-revealed hide ×. */
+/** ⊘ button that bans a word from combination `ci` only; re-renders that block. */
+function banButton(word: string, attemptId: string, ci: number): string {
+  return `<button type="button" class="btn-ban" data-keep-query
+  hx-post="/attempts/${encodeURIComponent(attemptId)}/ban"
+  hx-vals="${hxVals({ word, ci: String(ci) })}"
+  hx-target="#combination-${ci}"
+  hx-swap="outerHTML"
+  data-tip="bu çözümde yasakla"
+  aria-label="Bu çözümde yasakla: ${escapeHtml(word)}">&#8856;</button>`;
+}
+
+/**
+ * A clickable suggestion chip that adds `word` to combination `ci`, with
+ * hover-revealed ⊘ (ban from this combination) and × (hide everywhere).
+ */
 export function wordChipForm(word: string, attemptId: string, ci: number, complete = false): string {
   const chipClass = complete ? "word-chip word-chip--complete" : "word-chip";
   return `<form class="word-chip-form"
@@ -553,7 +571,7 @@ export function wordChipForm(word: string, attemptId: string, ci: number, comple
   hx-swap="outerHTML">
   <input type="hidden" name="word" value="${escapeHtml(word)}">
   <input type="hidden" name="ci" value="${ci}">
-  <button type="submit" class="${chipClass}">${escapeHtml(word)}</button>${hideButton(word, attemptId)}
+  <button type="submit" class="${chipClass}">${escapeHtml(word)}</button>${banButton(word, attemptId, ci)}${hideButton(word, attemptId)}
 </form>`;
 }
 
@@ -571,6 +589,24 @@ function hiddenWordsBar(hiddenWords: string[], attemptId: string): string {
   return `<details class="hidden-words">
   <summary>Gizlenenler (${hiddenWords.length})</summary>
   <p class="hidden-words-hint">Geri getirmek için tıklayın.</p>
+  <div class="hidden-words-list">${chips}</div>
+</details>`;
+}
+
+function bannedWordsBar(bannedWords: string[], attemptId: string, ci: number): string {
+  if (bannedWords.length === 0) return "";
+  const chips = bannedWords
+    .map((w) => `<button type="button" class="hidden-word-chip banned-word-chip" data-keep-query
+  hx-delete="/attempts/${encodeURIComponent(attemptId)}/ban"
+  hx-vals="${hxVals({ word: w, ci: String(ci) })}"
+  hx-target="#combination-${ci}"
+  hx-swap="outerHTML"
+  title="Yasağı kaldır"
+  aria-label="Yasağı kaldır: ${escapeHtml(w)}">${escapeHtml(w)}</button>`)
+    .join("");
+  return `<details class="hidden-words banned-words">
+  <summary>Bu çözümde yasaklananlar (${bannedWords.length})</summary>
+  <p class="hidden-words-hint">Yasağı kaldırmak için tıklayın.</p>
   <div class="hidden-words-list">${chips}</div>
 </details>`;
 }
@@ -594,7 +630,7 @@ function fillRow(sol: FillSolution, chosenWords: string[], attemptId: string, ci
   const slots = sol.slots
     .map((slot) => {
       const tokens = slot.words
-        .map((w) => `<span class="fill-token"><button type="button" class="fill-word" ${chooseAttrs(w)} title="Sadece bu kelimeyi ekle">${escapeHtml(w)}</button>${hideButton(w, attemptId, "btn-hide--fill")}</span>`)
+        .map((w) => `<span class="fill-token"><button type="button" class="fill-word" ${chooseAttrs(w)} title="Sadece bu kelimeyi ekle">${escapeHtml(w)}</button>${banButton(w, attemptId, ci)}${hideButton(w, attemptId, "btn-hide--fill")}</span>`)
         .join('<span class="fill-alt-sep">/</span>');
       return `<span class="fill-slot">${tokens}</span>`;
     })

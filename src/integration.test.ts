@@ -542,6 +542,69 @@ describe("Tamamla", () => {
   });
 });
 
+describe("Per-combination bans", () => {
+  let attemptId: string;
+  const words = (body: string) => [...body.matchAll(/data-words="([^"]*)"/g)].flatMap((m) => m[1].split(" "));
+  const chip = (w: string) => `<button type="submit" class="word-chip">${w}</button>`;
+
+  beforeAll(async () => {
+    const form = new FormData();
+    form.set("sourceText", "hayat güzel sevince");
+    form.set("wordListId", "turkce_kelime_listesi");
+    const res = await fetch(`${BASE}/attempts`, { method: "POST", body: form, redirect: "manual" });
+    attemptId = decodeURIComponent(res.headers.get("HX-Redirect")!.replace("/attempts/", ""));
+    createdAttemptIds.push(attemptId);
+    await fetch(`${BASE}/attempts/${attemptId}/combinations`, { method: "POST" });
+    await fetch(`${BASE}/attempts/${attemptId}/combinations`, { method: "POST" });
+  });
+
+  const ban = (word: string, ci: number) => {
+    const f = new FormData();
+    f.set("word", word);
+    f.set("ci", String(ci));
+    return fetch(`${BASE}/attempts/${attemptId}/ban`, { method: "POST", body: f }).then((r) => r.text());
+  };
+
+  test("ban removes a word from that combination's suggestions + Tamamla only", async () => {
+    const before = await (await fetch(`${BASE}/attempts/${attemptId}/fill?ci=1`)).text();
+    const target = words(before)[0];
+
+    const banned = await ban(target, 1);
+    expect(banned).toContain('id="combination-1"');
+    expect(banned).toContain("Bu çözümde yasaklananlar (1)");
+    expect(words(banned)).not.toContain(target);
+    expect(banned).not.toContain(chip(target));
+
+    const sugg1 = await (await fetch(`${BASE}/attempts/${attemptId}/suggestions?ci=1&q=${encodeURIComponent(target)}`)).text();
+    expect(sugg1).not.toContain(chip(target));
+
+    // other combinations are unaffected
+    expect(words(await (await fetch(`${BASE}/attempts/${attemptId}/fill?ci=0`)).text())).toContain(target);
+    const sugg0 = await (await fetch(`${BASE}/attempts/${attemptId}/suggestions?ci=0&q=${encodeURIComponent(target)}`)).text();
+    expect(sugg0).toContain(chip(target));
+
+    // deleting combination 0 shifts the ban along with combination 1 → 0
+    const afterDelete = await (await fetch(`${BASE}/attempts/${attemptId}/combinations/0`, { method: "DELETE" })).text();
+    expect(afterDelete).toContain("Bu çözümde yasaklananlar (1)");
+    expect(words(await (await fetch(`${BASE}/attempts/${attemptId}/fill?ci=0`)).text())).not.toContain(target);
+    expect(words(await (await fetch(`${BASE}/attempts/${attemptId}/fill?ci=1`)).text())).toContain(target);
+
+    const restored = await (
+      await fetch(`${BASE}/attempts/${attemptId}/ban?word=${encodeURIComponent(target)}&ci=0`, { method: "DELETE" })
+    ).text();
+    expect(restored).not.toContain("Bu çözümde yasaklananlar");
+    expect(words(restored)).toContain(target);
+  });
+
+  test("ban rejects out-of-range combination index", async () => {
+    const f = new FormData();
+    f.set("word", "hayat");
+    f.set("ci", "9");
+    const res = await fetch(`${BASE}/attempts/${attemptId}/ban`, { method: "POST", body: f });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("Validation", () => {
   test("POST /attempts rejects unknown word list ids", async () => {
     const form = new FormData();

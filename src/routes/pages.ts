@@ -64,16 +64,11 @@ export function handlePageRoute(req: Request): Response | null {
 
     const remainingPools: Map<string, number>[] = [];
     const suggestionsPerCombination: SuggestionsData[] = [];
-    for (const chosenWords of attempt.combinations) {
+    for (let ci = 0; ci < attempt.combinations.length; ci++) {
       // Tamamla is lazy-loaded per block on page load (see fillSection placeholder).
-      const { remainingPool, allResults, hiddenWords } = computeWorkspaceData(
-        attempt.sourceText,
-        chosenWords,
-        attempt.mappingSnapshot,
-        attempt.wordListId,
-      );
-      remainingPools.push(remainingPool);
-      suggestionsPerCombination.push(computeSuggestionsData(allResults, hiddenWords));
+      const data = computeWorkspaceData(attempt, ci);
+      remainingPools.push(data.remainingPool);
+      suggestionsPerCombination.push(computeSuggestionsData(data));
     }
 
     // Check if mapping is stale

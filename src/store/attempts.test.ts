@@ -5,6 +5,8 @@ import {
   updateAttempt,
   listAttempts,
   deleteAttempt,
+  getBans,
+  withBans,
 } from "./attempts";
 import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -99,5 +101,16 @@ describe("Attempt Store", () => {
     const all = listAttempts(TEST_DIR);
     expect(all.length).toBe(1);
     expect(all[0].combinations).toEqual([["te"]]);
+  });
+
+  test("withBans aligns bans with combinations and dedupes/sorts the target", () => {
+    const a = createAttempt({ sourceText: "abc", wordListId: "turkce", mappingSnapshot: [], mappingVersion: 1 }, TEST_DIR);
+    const three = updateAttempt(a.id, { combinations: [[], [], []] }, TEST_DIR);
+    expect(getBans(three, 1)).toEqual([]);
+    const bans = withBans(three, 1, (cur) => [...cur, "şeker", "çay", "çay"]);
+    expect(bans).toEqual([[], ["çay", "şeker"], []]);
+    const saved = updateAttempt(a.id, { bans }, TEST_DIR);
+    expect(getBans(saved, 1)).toEqual(["çay", "şeker"]);
+    expect(withBans(saved, 1, (cur) => cur.filter((w) => w !== "çay"))[1]).toEqual(["şeker"]);
   });
 });

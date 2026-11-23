@@ -10,6 +10,8 @@ export interface Attempt {
   mappingSnapshot: [string, string][];
   mappingVersion: number;
   combinations: string[][];
+  /** Per-combination banned words, parallel to `combinations` (may be shorter / absent). */
+  bans?: string[][];
 }
 
 interface CreateAttemptInput {
@@ -126,4 +128,21 @@ export function deleteAttempt(id: string, dir: string = DEFAULT_DIR): void {
   if (existsSync(filePath)) {
     unlinkSync(filePath);
   }
+}
+
+/** Banned words for combination `ci` (lowercased, tr-TR). */
+export function getBans(attempt: Attempt, ci: number): string[] {
+  return attempt.bans?.[ci] ?? [];
+}
+
+/**
+ * Return a `bans` array aligned with `attempt.combinations` where combination
+ * `ci`'s list is replaced by `fn(current)` (deduped, sorted tr-TR).
+ */
+export function withBans(attempt: Attempt, ci: number, fn: (current: string[]) => string[]): string[][] {
+  return attempt.combinations.map((_, i) => {
+    const current = getBans(attempt, i);
+    if (i !== ci) return [...current];
+    return [...new Set(fn(current))].sort((a, b) => a.localeCompare(b, "tr-TR"));
+  });
 }

@@ -608,10 +608,20 @@
 
   // Hide/unhide re-renders every block: tell the server which ones are open,
   // and remember each open block's search query so it can be restored.
+  // Ban/unban (data-keep-query) re-renders only its own block: remember that
+  // block's query the same way.
   var pendingQueries = null;
   document.addEventListener("htmx:configRequest", function (e) {
     var elt = e.detail.elt;
-    if (!elt || !elt.hasAttribute || !elt.hasAttribute("data-all-blocks")) return;
+    if (!elt || !elt.hasAttribute) return;
+    if (elt.hasAttribute("data-keep-query")) {
+      var own = elt.closest(".combination-block");
+      var ownInput = own && own.querySelector(".suggestions-search input");
+      pendingQueries = {};
+      if (ownInput && ownInput.value.trim()) pendingQueries[blockIndex(own)] = ownInput.value;
+      return;
+    }
+    if (!elt.hasAttribute("data-all-blocks")) return;
     var open = [];
     pendingQueries = {};
     var blocks = document.querySelectorAll(".combination-block");
@@ -629,7 +639,8 @@
   document.addEventListener("htmx:sendError", dropPendingQueries);
 
   document.addEventListener("htmx:afterSettle", function (e) {
-    if (!pendingQueries || !e.detail.target.classList.contains("combinations-container")) return;
+    var t = e.detail.target;
+    if (!pendingQueries || !(t.classList.contains("combinations-container") || /^combination-\d+$/.test(t.id))) return;
     var queries = pendingQueries;
     pendingQueries = null;
     for (var ci in queries) {

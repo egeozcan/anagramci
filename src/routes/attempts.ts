@@ -3,6 +3,8 @@ import {
   getAttempt,
   updateAttempt,
   deleteAttempt,
+  getBans,
+  withBans,
 } from "../store/attempts";
 import type { Attempt } from "../store/attempts";
 import { getWordList } from "../store/wordlists";
@@ -55,41 +57,42 @@ function filterByQuery(results: DAWGResult[], query: string): DAWGResult[] {
   return results.filter((r) => r.word.toLocaleLowerCase("tr-TR").includes(q));
 }
 
-/**
- * Compute the remaining pool, available words (minus hidden ones) and,
- * when requested, the full-anagram "Tamamla" solutions for one combination.
- */
-export function computeWorkspaceData(
-  sourceText: string,
-  chosenWords: string[],
-  mappingSnapshot: [string, string][],
-  wordListId: string,
-  withFill = false,
-): { remainingPool: Map<string, number>; allResults: DAWGResult[]; hiddenWords: string[]; fill: FillResult | undefined } {
-  const mapping = buildMappingNormalizer(mappingSnapshot);
-  const remainingPool = computeRemainingPool(sourceText, chosenWords, mapping);
-  const hiddenWords = getHiddenWords(wordListId);
-  const hidden = new Set(hiddenWords);
+export interface WorkspaceData {
+  remainingPool: Map<string, number>;
+  allResults: DAWGResult[];
+  hiddenWords: string[];
+  bannedWords: string[];
+  fill: FillResult | undefined;
+}
 
-  const wordList = getWordList(wordListId);
+/**
+ * Compute the remaining pool, available words (minus words hidden for the
+ * word list and words banned for this combination) and, when requested, the
+ * full-anagram "Tamamla" solutions for combination `ci`.
+ */
+export function computeWorkspaceData(attempt: Attempt, ci: number, withFill = false): WorkspaceData {
+  const mapping = buildMappingNormalizer(attempt.mappingSnapshot);
+  const chosenWords = attempt.combinations[ci] ?? [];
+  const remainingPool = computeRemainingPool(attempt.sourceText, chosenWords, mapping);
+  const hiddenWords = getHiddenWords(attempt.wordListId);
+  const bannedWords = getBans(attempt, ci);
+  const excluded = new Set([...hiddenWords, ...bannedWords]);
+
+  const wordList = getWordList(attempt.wordListId);
   let allResults: DAWGResult[] = [];
   if (wordList) {
     allResults = wordList.dawg.findAvailable(new Map(remainingPool), mapping);
-    if (hidden.size > 0) allResults = allResults.filter((r) => !hidden.has(r.word));
+    if (excluded.size > 0) allResults = allResults.filter((r) => !excluded.has(r.word));
   }
 
   const fill = withFill ? findFullAnagrams(allResults, remainingPool, mapping) : undefined;
-  return { remainingPool, allResults, hiddenWords, fill };
+  return { remainingPool, allResults, hiddenWords, bannedWords, fill };
 }
 
 /**
  * Compute paginated suggestions data for a combination.
  */
-export function computeSuggestionsData(
-  allResults: DAWGResult[],
-  hiddenWords: string[] = [],
-  fill?: FillResult,
-): SuggestionsData {
+export function computeSuggestionsData({ allResults, hiddenWords, bannedWords, fill }: WorkspaceData): SuggestionsData {
   const grouped = groupByLetterCount(allResults);
   const totalByGroup = new Map<number, number>();
   for (const [lc, arr] of grouped) {
@@ -99,7 +102,7 @@ export function computeSuggestionsData(
   for (const [lc, arr] of grouped) {
     paginated.set(lc, arr.slice(0, PAGE_SIZE));
   }
-  return { results: paginated, totalByGroup, hiddenWords, fill };
+  return { results: paginated, totalByGroup, hiddenWords, bannedWords, fill };
 }
 
 /**
@@ -107,15 +110,9 @@ export function computeSuggestionsData(
  * Open blocks get Tamamla computed inline; closed ones get a lazy placeholder.
  */
 function renderCombinationBlock(attempt: Attempt, ci: number, open = true): string {
-  const { remainingPool, allResults, hiddenWords, fill } = computeWorkspaceData(
-    attempt.sourceText,
-    attempt.combinations[ci],
-    attempt.mappingSnapshot,
-    attempt.wordListId,
-    open,
-  );
-  const suggestions = computeSuggestionsData(allResults, hiddenWords, fill);
-  return combinationBlock(ci, attempt.combinations[ci], remainingPool, attempt.id, attempt.combinations.length, suggestions, attempt.mappingSnapshot, attempt.sourceText, open);
+  const data = computeWorkspaceData(attempt, ci, open);
+  const suggestions = computeSuggestionsData(data);
+  return combinationBlock(ci, attempt.combinations[ci], data.remainingPool, attempt.id, attempt.combinations.length, suggestions, attempt.mappingSnapshot, attempt.sourceText, open);
 }
 
 /** Render every combination block, opening those whose index is in `open`. */
@@ -263,13 +260,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
       return html("<p>Deneme bulunamadi.</p>", 404);
     }
 
-    const chosenWords = attempt.combinations[ci] ?? [];
-    const { remainingPool, allResults } = computeWorkspaceData(
-      attempt.sourceText,
-      chosenWords,
-      attempt.mappingSnapshot,
-      attempt.wordListId,
-    );
+    const { remainingPool, allResults } = computeWorkspaceData(attempt, ci);
     let remainingLetterCount = 0;
     for (const count of remainingPool.values()) remainingLetterCount += count;
 
@@ -325,15 +316,34 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
     if (!Number.isInteger(ci) || ci < 0 || ci >= attempt.combinations.length) {
       return html("<p>Geçersiz kombinasyon.</p>", 400);
     }
-    const chosenWords = attempt.combinations[ci];
-    const { remainingPool, fill } = computeWorkspaceData(
-      attempt.sourceText,
-      chosenWords,
-      attempt.mappingSnapshot,
-      attempt.wordListId,
-      true,
+    const { remainingPool, fill } = computeWorkspaceData(attempt, ci, true);
+    return html(fillSection(fill, remainingPool, attempt.combinations[ci], attempt.id, ci));
+  }
+
+  // POST /attempts/:id/ban (word, ci) — ban a word from one combination
+  // DELETE /attempts/:id/ban?word=&ci= — unban it
+  // Bans are per combination, so only that block is re-rendered.
+  const banMatch = path.match(/^\/attempts\/([^/]+)\/ban$/);
+  if ((method === "POST" || method === "DELETE") && banMatch) {
+    const id = decodeURIComponent(banMatch[1]);
+    const params = method === "POST" ? await req.formData() : url.searchParams;
+    const word = ((params.get("word") as string | null) ?? "").trim().toLocaleLowerCase("tr-TR");
+    const ci = parseInt((params.get("ci") as string | null) ?? "0", 10);
+
+    const attempt = getAttempt(id);
+    if (!attempt) {
+      return html("<p>Deneme bulunamadi.</p>", 404);
+    }
+    if (!Number.isInteger(ci) || ci < 0 || ci >= attempt.combinations.length) {
+      return html("<p>Geçersiz kombinasyon.</p>", 400);
+    }
+    if (!word) return html(renderCombinationBlock(attempt, ci));
+
+    const bans = withBans(attempt, ci, (current) =>
+      method === "POST" ? [...current, word] : current.filter((w) => w !== word),
     );
-    return html(fillSection(fill, remainingPool, chosenWords, attempt.id, ci));
+    const updated = updateAttempt(id, { bans });
+    return html(renderCombinationBlock(updated, ci));
   }
 
   // POST /attempts/:id/hide (word, open) — hide a word for this word list
@@ -397,10 +407,12 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
     }
 
     const combinations = [...attempt.combinations];
+    const bans = attempt.combinations.map((_, i) => getBans(attempt, i));
     if (ci >= 0 && ci < combinations.length) {
       combinations.splice(ci, 1);
+      bans.splice(ci, 1);
     }
-    const updated = updateAttempt(id, { combinations });
+    const updated = updateAttempt(id, { combinations, bans });
 
     // Return ALL remaining combination blocks (handles index shifting)
     const blocks = updated.combinations.map((_, i) =>
@@ -428,14 +440,9 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
     const remainingPools: Map<string, number>[] = [];
     const suggestionsPerCombination: SuggestionsData[] = [];
     for (let i = 0; i < updated.combinations.length; i++) {
-      const { remainingPool, allResults, hiddenWords } = computeWorkspaceData(
-        updated.sourceText,
-        updated.combinations[i],
-        updated.mappingSnapshot,
-        updated.wordListId,
-      );
-      remainingPools.push(remainingPool);
-      suggestionsPerCombination.push(computeSuggestionsData(allResults, hiddenWords));
+      const data = computeWorkspaceData(updated, i);
+      remainingPools.push(data.remainingPool);
+      suggestionsPerCombination.push(computeSuggestionsData(data));
     }
 
     const wordList = getWordList(updated.wordListId);
