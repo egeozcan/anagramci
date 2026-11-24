@@ -43,6 +43,9 @@ function ensureDir(dir: string): void {
   }
 }
 
+/** Matches generated ids (UUIDs) and legacy ids; blocks path traversal. */
+const SAFE_ID = /^[A-Za-z0-9_-]+$/;
+
 function attemptPath(id: string, dir: string): string {
   return join(dir, `${id}.json`);
 }
@@ -73,6 +76,7 @@ export function createAttempt(input: CreateAttemptInput, dir: string = DEFAULT_D
  * Get an attempt by ID, or null if it doesn't exist.
  */
 export function getAttempt(id: string, dir: string = DEFAULT_DIR): Attempt | null {
+  if (!SAFE_ID.test(id)) return null;
   const filePath = attemptPath(id, dir);
   if (!existsSync(filePath)) {
     return null;
@@ -124,6 +128,7 @@ export function listAttempts(dir: string = DEFAULT_DIR): Attempt[] {
  * Delete an attempt by ID.
  */
 export function deleteAttempt(id: string, dir: string = DEFAULT_DIR): void {
+  if (!SAFE_ID.test(id)) return;
   const filePath = attemptPath(id, dir);
   if (existsSync(filePath)) {
     unlinkSync(filePath);

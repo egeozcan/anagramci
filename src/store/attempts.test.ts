@@ -113,4 +113,16 @@ describe("Attempt Store", () => {
     expect(getBans(saved, 1)).toEqual(["çay", "şeker"]);
     expect(withBans(saved, 1, (cur) => cur.filter((w) => w !== "çay"))[1]).toEqual(["şeker"]);
   });
+
+  test("getAttempt refuses ids that could escape the directory", () => {
+    mkdirSync(`${TEST_DIR}/sub`, { recursive: true });
+    writeFileSync(`${TEST_DIR}/sub/x.json`, JSON.stringify({ id: "x", combinations: [[]] }));
+    writeFileSync("data/outside-attempt.json", JSON.stringify({ id: "o", combinations: [[]] }));
+    try {
+      expect(getAttempt("../outside-attempt", TEST_DIR)).toBeNull();
+      expect(getAttempt("sub/x", TEST_DIR)).toBeNull();
+    } finally {
+      rmSync("data/outside-attempt.json", { force: true });
+    }
+  });
 });

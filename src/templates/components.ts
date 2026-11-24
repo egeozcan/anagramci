@@ -2,7 +2,11 @@ import type { Attempt } from "../store/attempts";
 import type { MappingData } from "../store/mappings";
 import type { DAWGResult } from "../dawg";
 import type { FillResult, FillSolution } from "../fill";
-import { buildMappingNormalizer, charOverflowMasks, computeRemainingPool, LETTER_RE } from "../anagram";
+import { buildMappingNormalizer, charOverflowMasks, computeCharMapping, computeRemainingPool, LETTER_RE } from "../anagram";
+import { buildPuzzle, isPuzzle } from "../reveal-puzzle";
+/** attemptId + exact words → slug of an existing reveal of them, or null. */
+export type RevealSlugLookup = (attemptId: string, words: string[]) => string | null;
+import { revealBadge, revealMark } from "./reveal";
 
 // ---------------------------------------------------------------------------
 // Utility
@@ -15,50 +19,6 @@ export function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
-}
-
-/**
- * Compute a mapping from each chosen-word character index to a source-text
- * character index.  Also identifies overflow chars (in chosen but not source)
- * and source-only chars (in source but not chosen).
- *
- * Returns: { charMap: Map<chosenIdx, sourceIdx>, overflowIdxs: Set<chosenIdx>, sourceOnlyIdxs: Set<sourceIdx> }
- */
-function computeCharMapping(
-  sourceText: string,
-  chosenWords: string[],
-  normalizer: Map<string, string>,
-): { charMap: Map<number, number>; overflowIdxs: Set<number>; sourceOnlyIdxs: Set<number> } {
-  const srcChars = [...sourceText.toLocaleLowerCase("tr-TR")].filter(c => c !== " ");
-  const chosenChars = chosenWords.flatMap(w => [...w.toLocaleLowerCase("tr-TR")]).filter(c => c !== " ");
-
-  const norm = (ch: string) => normalizer.get(ch) ?? ch;
-
-  const usedSource = new Set<number>();
-  const charMap = new Map<number, number>();
-
-  for (let ci = 0; ci < chosenChars.length; ci++) {
-    const nch = norm(chosenChars[ci]);
-    for (let si = 0; si < srcChars.length; si++) {
-      if (!usedSource.has(si) && norm(srcChars[si]) === nch) {
-        charMap.set(ci, si);
-        usedSource.add(si);
-        break;
-      }
-    }
-  }
-
-  const overflowIdxs = new Set<number>();
-  for (let ci = 0; ci < chosenChars.length; ci++) {
-    if (!charMap.has(ci)) overflowIdxs.add(ci);
-  }
-
-  const sourceOnlyIdxs = new Set<number>();
-  for (let si = 0; si < srcChars.length; si++) {
-    if (!usedSource.has(si)) sourceOnlyIdxs.add(si);
-  }
-
-  return { charMap, overflowIdxs, sourceOnlyIdxs };
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +35,7 @@ export function homePageContent(
   attempts: Attempt[],
   wordLists: WordListMeta[],
   mappingsByList: Map<string, MappingData>,
+  revealSlugOf: RevealSlugLookup = () => null,
 ): string {
   const attemptCards = attempts.length > 0
     ? attempts.map((a) => {
@@ -90,6 +51,10 @@ export function homePageContent(
         const mapping = mappingsByList.get(a.wordListId);
         const mappingPairs = mapping ? mapping.pairs : [];
         const normalizer = buildMappingNormalizer(mappingPairs);
+        // Reveal badges go next to (not inside) the card link: no nested <a>.
+        const revealSlugs = a.combinations
+          .map((words) => revealSlugOf(a.id, words))
+          .filter((s): s is string => s !== null);
 
         const chosenPreview = a.combinations.some(c => c.length > 0)
           ? a.combinations.map((words) => {
@@ -136,6 +101,7 @@ export function homePageContent(
       <span class="attempt-date">${date}</span>
     </div>
   </a>
+  ${revealSlugs.map(revealBadge).join("")}
   <button class="btn btn-danger btn-sm"
     hx-delete="/attempts/${encodeURIComponent(a.id)}"
     hx-target="closest .attempt-card"
@@ -191,6 +157,7 @@ export function workspaceContent(
   wordListName: string,
   mappingStale: boolean,
   suggestionsPerCombination: SuggestionsData[] = [],
+  revealSlugs: (string | null)[] = [],
 ): string {
   const staleWarning = mappingStale
     ? `<div class="mapping-stale-warning">
@@ -203,7 +170,7 @@ export function workspaceContent(
     : "";
 
   const combinationBlocks = attempt.combinations.map((chosenWords, ci) =>
-    combinationBlock(ci, chosenWords, remainingPools[ci], attempt.id, attempt.combinations.length, suggestionsPerCombination[ci], attempt.mappingSnapshot, attempt.sourceText),
+    combinationBlock(ci, chosenWords, remainingPools[ci], attempt.id, attempt.combinations.length, suggestionsPerCombination[ci], attempt.mappingSnapshot, attempt.sourceText, false, revealSlugs[ci] ?? null),
   ).join("\n");
 
   return `<div class="workspace-header">
@@ -221,7 +188,7 @@ export function workspaceContent(
 <button class="btn btn-secondary btn-add-combination"
   hx-post="/attempts/${encodeURIComponent(attempt.id)}/combinations"
   hx-target=".combinations-container"
-  hx-swap="beforeend">+ Degisik Bir Kombinasyon Ekle</button>`;
+  hx-swap="beforeend">+ Değişik Bir Kombinasyon Ekle</button>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +215,7 @@ export function combinationBlock(
   mappingPairs: [string, string][] = [],
   sourceText: string = "",
   open: boolean = false,
+  revealSlug: string | null = null,
 ): string {
   let remainingLetterCount = 0;
   for (const count of remainingPool.values()) remainingLetterCount += count;
@@ -263,11 +231,16 @@ export function combinationBlock(
   const normalizer = buildMappingNormalizer(mappingPairs);
 
   let summaryPreview = "";
+  let mark = "";
   if (chosenWords.length > 0) {
     const { charMap, overflowIdxs, sourceOnlyIdxs } = computeCharMapping(sourceText, chosenWords, normalizer);
     const hasOverflow = overflowIdxs.size > 0;
     const isPerfect = !hasOverflow && remainingPool.size === 0;
     const perfectClass = isPerfect ? " combination-preview--perfect" : "";
+    // Showcasing uses the reveal builder's (stricter) perfect check.
+    if (isPerfect && isPuzzle(buildPuzzle({ sourceText, words: chosenWords, mappingPairs }))) {
+      mark = revealMark(attemptId, ci, revealSlug);
+    }
 
     // Serialize mapping data
     const mapStr = [...charMap.entries()].map(([c, s]) => `${c}:${s}`).join(",");
@@ -336,9 +309,11 @@ export function combinationBlock(
     <span class="combination-label">(${ci + 1})</span>
     ${summaryPreview}
     <span class="combination-fill-preview" aria-hidden="true"></span>
+    ${mark}
     ${deleteBtn}
   </summary>
   <div class="combination-panels">
+    <div id="reveal-slot-${ci}" class="reveal-slot"></div>
     ${chosenWordsPanel(chosenWords, attemptId, ci, sourceText, mappingPairs)}
     ${remainingLettersDisplay(remainingPool, ci)}
     ${suggestionsPanel(suggestions.results, "", 1, attemptId, suggestions.totalByGroup, ci, remainingLetterCount, fillSection(suggestions.fill, remainingPool, chosenWords, attemptId, ci), suggestions.hiddenWords ?? [], suggestions.bannedWords ?? [])}

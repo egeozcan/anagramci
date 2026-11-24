@@ -1,0 +1,352 @@
+[
+  {
+    "slug": "hazir2",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "bir kuş tabelası",
+    "words": [
+      "balıkesir",
+      "şubat"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Takvim yaprağı",
+    "note": "Tabela",
+    "seed": true
+  },
+  {
+    "slug": "hazir3",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "nazım hikmet",
+    "words": [
+      "mihnet",
+      "kazım"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Şairin çilesi",
+    "note": "Şair",
+    "seed": true
+  },
+  {
+    "slug": "hazir4",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "yaşar kemal",
+    "words": [
+      "karamel",
+      "yaş"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Tatlı bir yaş",
+    "note": "Yazar",
+    "seed": true
+  },
+  {
+    "slug": "hazir5",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "orhan pamuk",
+    "words": [
+      "harap",
+      "konum"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Hâl ve gidiş",
+    "note": "Yazar",
+    "seed": true
+  },
+  {
+    "slug": "hazir6",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "mavi yolculuk",
+    "words": [
+      "kumluca",
+      "viyol"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Kıyıda bir konser",
+    "note": "Gezi",
+    "seed": true
+  },
+  {
+    "slug": "hazir7",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "eskişehir",
+    "words": [
+      "şehir",
+      "eski"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Adı üstünde",
+    "note": "Şehir",
+    "seed": true
+  },
+  {
+    "slug": "hazir8",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "sait faik",
+    "words": [
+      "aktif",
+      "asi"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Hareketli bir isyankâr",
+    "note": "Yazar",
+    "seed": true
+  },
+  {
+    "slug": "hazir9",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "ateş düştüğü yeri yakar",
+    "words": [
+      "tekirdağ",
+      "yürüyüş",
+      "ataşe"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Diplomatik yürüyüş",
+    "note": "Atasözü",
+    "seed": true
+  },
+  {
+    "slug": "hazirb",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "Üsküdar'a gider iken",
+    "words": [
+      "dakika",
+      "edirne",
+      "sürgü"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Sürgün treni",
+    "note": "Türkü",
+    "seed": true
+  },
+  {
+    "slug": "hazirc",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "beyaz kale",
+    "words": [
+      "zeybek",
+      "ala"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Ege'den bir oyun",
+    "note": "Roman",
+    "seed": true
+  },
+  {
+    "slug": "hazird",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "sinekli bakkal",
+    "words": [
+      "keskinlik",
+      "abla"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Ablanın kılıcı",
+    "note": "Roman",
+    "seed": true
+  },
+  {
+    "slug": "hazire",
+    "createdAt": "2026-11-24T00:00:00.000Z",
+    "attemptId": null,
+    "ci": null,
+    "wordListId": null,
+    "sourceText": "kara sevda",
+    "words": [
+      "sakar",
+      "deva"
+    ],
+    "mappingPairs": [
+      [
+        "â",
+        "a"
+      ],
+      [
+        "î",
+        "i"
+      ],
+      [
+        "û",
+        "u"
+      ]
+    ],
+    "title": "Beceriksiz ilaç",
+    "note": "Deyim",
+    "seed": true
+  }
+]

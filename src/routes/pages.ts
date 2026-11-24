@@ -10,6 +10,7 @@ import {
 } from "../templates/components";
 import type { SuggestionsData } from "../templates/components";
 import type { MappingData } from "../store/mappings";
+import { lookupRevealSlug } from "../store/reveals";
 
 function html(body: string, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(body, {
@@ -46,7 +47,7 @@ export function handlePageRoute(req: Request): Response | null {
       mappingsByList.set(m.wordListId, { pairs: m.pairs, version: m.version });
     }
 
-    const body = layout("Ana Sayfa", homePageContent(attempts, wordLists, mappingsByList));
+    const body = layout("Ana Sayfa", homePageContent(attempts, wordLists, mappingsByList, lookupRevealSlug));
     return html(body);
   }
 
@@ -75,9 +76,11 @@ export function handlePageRoute(req: Request): Response | null {
     const currentMapping = getMappings(attempt.wordListId);
     const mappingStale = currentMapping.version !== attempt.mappingVersion;
 
+    const revealSlugs = attempt.combinations.map((words) => lookupRevealSlug(attempt.id, words));
+
     const body = layout(
-      "Calisma Alani",
-      `<div class="workspace">${workspaceContent(attempt, remainingPools, wordListName, mappingStale, suggestionsPerCombination)}</div>`,
+      "Çalışma Alanı",
+      `<div class="workspace">${workspaceContent(attempt, remainingPools, wordListName, mappingStale, suggestionsPerCombination, revealSlugs)}</div>`,
     );
     return html(body);
   }

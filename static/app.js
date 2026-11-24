@@ -106,18 +106,61 @@
     }
   }
 
-  // Prevent delete button inside <summary> from toggling the combination details
+  // Prevent buttons and the ✦ badge link inside <summary> from toggling the
+  // combination details (Cmd/middle-click on the badge keeps the page).
+  // ✦ Sergile instead opens it, so the form it loads into the panels is visible.
   document.addEventListener("click", function (e) {
     var comboHeader = e.target.closest(".combination-header");
-    if (comboHeader && e.target.closest(".btn")) {
+    if (comboHeader && e.target.closest(".btn, .reveal-badge")) {
       var details = comboHeader.closest("details");
       if (details) {
-        var wasOpen = details.open;
+        var keepOpen = details.open || !!e.target.closest(".btn-sergile");
         requestAnimationFrame(function () {
-          details.open = wasOpen;
+          details.open = keepOpen;
         });
       }
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Vitrin: cancel the Sergile form, copy buttons (reveal.js has its own copy)
+  // -------------------------------------------------------------------------
+  document.addEventListener("click", function (e) {
+    var cancel = e.target.closest(".btn-reveal-cancel");
+    if (cancel) {
+      var slot = cancel.closest(".reveal-slot");
+      if (slot) slot.innerHTML = "";
+      return;
+    }
+    var btn = e.target.closest(".btn-copy");
+    if (!btn) return;
+    var text = btn.dataset.copyPath ? location.origin + btn.dataset.copyPath : btn.dataset.copy || "";
+    function fallback() {
+      var old = btn.parentNode.querySelector(".copy-fallback");
+      if (old) old.remove();
+      var wrap = document.createElement("div");
+      wrap.className = "copy-fallback";
+      var ta = document.createElement("textarea");
+      ta.readOnly = true;
+      ta.value = text;
+      var hint = document.createElement("small");
+      hint.textContent = "Kopyalamak için Ctrl/⌘+C";
+      wrap.appendChild(ta);
+      wrap.appendChild(hint);
+      btn.insertAdjacentElement("afterend", wrap);
+      ta.focus();
+      ta.select();
+    }
+    // Store the real label once: a quick double click must not restore "Kopyalandı ✓".
+    function done() {
+      if (btn.dataset.label == null) btn.dataset.label = btn.textContent;
+      btn.textContent = "Kopyalandı ✓";
+      clearTimeout(btn._copyTimer);
+      btn._copyTimer = setTimeout(function () { btn.textContent = btn.dataset.label; }, 1500);
+    }
+    try {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } catch (err) { fallback(); }
   });
 
   document.addEventListener("mouseover", function (e) {

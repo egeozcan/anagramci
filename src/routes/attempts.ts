@@ -22,6 +22,7 @@ import type { SuggestionsData } from "../templates/components";
 import { findFullAnagrams } from "../fill";
 import type { FillResult } from "../fill";
 import { getHiddenWords, hideWord, unhideWord } from "../store/hidden";
+import { lookupRevealSlug } from "../store/reveals";
 
 function html(body: string, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(body, {
@@ -109,10 +110,16 @@ export function computeSuggestionsData({ allResults, hiddenWords, bannedWords, f
  * Render a full combination block for a specific combination index.
  * Open blocks get Tamamla computed inline; closed ones get a lazy placeholder.
  */
-function renderCombinationBlock(attempt: Attempt, ci: number, open = true): string {
+function renderCombinationBlock(
+  attempt: Attempt,
+  ci: number,
+  open = true,
+): string {
   const data = computeWorkspaceData(attempt, ci, open);
   const suggestions = computeSuggestionsData(data);
-  return combinationBlock(ci, attempt.combinations[ci], data.remainingPool, attempt.id, attempt.combinations.length, suggestions, attempt.mappingSnapshot, attempt.sourceText, open);
+  const words = attempt.combinations[ci];
+  const revealSlug = lookupRevealSlug(attempt.id, words);
+  return combinationBlock(ci, words, data.remainingPool, attempt.id, attempt.combinations.length, suggestions, attempt.mappingSnapshot, attempt.sourceText, open, revealSlug);
 }
 
 /** Render every combination block, opening those whose index is in `open`. */
@@ -415,9 +422,7 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
     const updated = updateAttempt(id, { combinations, bans });
 
     // Return ALL remaining combination blocks (handles index shifting)
-    const blocks = updated.combinations.map((_, i) =>
-      renderCombinationBlock(updated, i),
-    ).join("\n");
+    const blocks = updated.combinations.map((_, i) => renderCombinationBlock(updated, i, true)).join("\n");
     return html(blocks);
   }
 
@@ -448,7 +453,8 @@ export async function handleAttemptRoute(req: Request): Promise<Response | null>
     const wordList = getWordList(updated.wordListId);
     const wordListName = wordList ? wordList.name : "Bilinmeyen liste";
 
-    return html(workspaceContent(updated, remainingPools, wordListName, false, suggestionsPerCombination));
+    const revealSlugs = updated.combinations.map((words) => lookupRevealSlug(updated.id, words));
+    return html(workspaceContent(updated, remainingPools, wordListName, false, suggestionsPerCombination, revealSlugs));
   }
 
   // DELETE /attempts/:id — Delete an attempt

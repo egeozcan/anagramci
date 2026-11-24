@@ -1,0 +1,536 @@
+/* ==========================================================================
+   Vitrin — reveal page, standalone puzzle and gallery.
+   Loaded after style.css; reuses its tokens only (no new colors).
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.reveal-brand {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--color-primary);
+  letter-spacing: 0.02em;
+}
+
+.reveal-main {
+  max-width: 860px;
+}
+
+/* --------------------------------------------------------------------------
+   Stage
+   -------------------------------------------------------------------------- */
+.reveal-stage {
+  /* Shrink below the clamp floor when the longest word would overflow the
+     stage (--tile-n / --slot-n are set inline from the longest group). */
+  container-type: inline-size;
+  --tile: min(clamp(2rem, 6vw, 3.5rem), calc((100cqi - var(--tile-n, 1) * 3px) / var(--tile-n, 1)));
+  --slot: min(clamp(1.5rem, 4.6vw, 2.6rem), calc((100cqi - 2 * var(--spacing-md) - var(--slot-n, 1) * 4px) / var(--slot-n, 1)));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl) var(--spacing-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.play-bar {
+  align-self: stretch;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-copper);
+  letter-spacing: 0.04em;
+}
+
+.reveal-head {
+  max-width: 36rem;
+}
+
+.reveal-title {
+  font-family: var(--font-heading);
+  font-variant: small-caps;
+  font-weight: 600;
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  letter-spacing: 0.04em;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.reveal-note {
+  margin-top: var(--spacing-xs);
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Tiles — mosaic stones; a word never breaks across lines
+   -------------------------------------------------------------------------- */
+.reveal-tiles,
+.reveal-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: calc(var(--tile) * 0.45);
+  row-gap: var(--spacing-sm);
+}
+
+.reveal-tiles[hidden] {
+  display: none;
+}
+
+.reveal-word,
+.slot-word {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.tile {
+  width: var(--tile);
+  height: var(--tile);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: calc(var(--tile) * 0.5);
+  color: var(--color-text);
+  background: var(--color-copper-bg);
+  border: 1px solid var(--color-border-heavy);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 0 var(--color-border), var(--shadow-sm);
+  cursor: pointer;
+  rotate: 0deg;
+  transition: opacity var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.reveal-word .tile:nth-child(4n + 1) { background: var(--color-copper-bg); rotate: -1.5deg; }
+.reveal-word .tile:nth-child(4n + 2) { background: var(--color-primary-bg); rotate: 1deg; }
+.reveal-word .tile:nth-child(4n + 3) { background: var(--color-warning-bg); rotate: -0.5deg; }
+.reveal-word .tile:nth-child(4n + 4) { background: var(--color-surface-inset); rotate: 1.5deg; }
+
+.tile:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--color-copper);
+  outline-offset: 2px;
+}
+
+.tile--used {
+  opacity: 0.6;
+  box-shadow: var(--shadow-pressed);
+  transform: translateY(1px);
+}
+
+.tile--spent {
+  opacity: 0.25;
+  cursor: default;
+  box-shadow: none;
+}
+
+.tile:disabled {
+  cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Slots — the hidden source's shape
+   -------------------------------------------------------------------------- */
+.reveal-slots {
+  column-gap: calc(var(--slot) * 0.8);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+}
+
+.slot {
+  width: var(--slot);
+  margin: 0 2px;
+  height: calc(var(--slot) * 1.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: calc(var(--slot) * 0.6);
+  color: var(--color-text);
+  border-bottom: 2px solid var(--color-border);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.slot--fixed {
+  visibility: hidden;
+  width: auto;
+  min-width: calc(var(--slot) * 0.4);
+  border-bottom: none;
+}
+
+.slot--hinted {
+  color: var(--color-text-muted);
+  border-bottom: 2px dotted var(--color-text-muted);
+}
+
+.slot--locked {
+  background: var(--color-success-bg);
+  border-bottom: 2px solid var(--color-success);
+}
+
+.slot--hintlocked {
+  background: var(--color-warning-bg);
+  border-bottom: 2px solid var(--color-warning);
+}
+
+.reveal-stage--solved .guess-form,
+.reveal-stage--solved .reveal-controls,
+.reveal-stage--solved .reveal-keys,
+.reveal-stage--solved .reveal-status {
+  display: none;
+}
+
+.reveal-stage--flying .slot {
+  color: transparent;
+}
+
+.reveal-stage--solved .slot {
+  border-bottom-style: solid;
+  border-bottom-color: var(--color-primary);
+}
+
+.reveal-stage--solved .slot--locked,
+.reveal-stage--solved .slot--solved {
+  background: var(--color-primary-bg);
+}
+
+.reveal-stage--solved .slot--fixed {
+  visibility: visible;
+  animation: reveal-fade-in var(--duration-slow) var(--ease-out);
+}
+
+.reveal-stage--solved {
+  border-color: var(--color-primary);
+}
+
+@keyframes reveal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   Guess input and controls
+   -------------------------------------------------------------------------- */
+.guess-form {
+  display: flex;
+  gap: var(--spacing-sm);
+  width: 100%;
+  max-width: 28rem;
+}
+
+.guess-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.guess-input--miss {
+  outline: 2px solid var(--color-danger);
+  outline-offset: 1px;
+}
+
+.reveal-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm);
+  width: 100%;
+  max-width: 28rem;
+}
+
+@media (min-width: 768px) {
+  .reveal-controls {
+    display: flex;
+    justify-content: center;
+    max-width: none;
+  }
+}
+
+.reveal-controls .btn:disabled,
+.guess-form .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+.reveal-status {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  min-height: 1.6em;
+}
+
+.reveal-feedback {
+  color: var(--color-text-muted);
+}
+
+.reveal-keys {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.reveal-keys kbd {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0 0.3em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-inset);
+}
+
+/* --------------------------------------------------------------------------
+   Result
+   -------------------------------------------------------------------------- */
+.reveal-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  animation: reveal-fade-in var(--duration-slow) var(--ease-out);
+}
+
+.reveal-result[hidden],
+.round-summary[hidden] {
+  display: none;
+}
+
+.result-score {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: help;
+}
+
+.result-line {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.result-actions,
+.round-summary,
+.reveal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  justify-content: center;
+  align-items: center;
+}
+
+.round-summary {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--color-primary-bg);
+  border-radius: var(--radius-md);
+}
+
+.round-summary-text {
+  width: 100%;
+  font-weight: 600;
+}
+
+.reveal-footer {
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border-light);
+  align-self: stretch;
+  align-items: flex-start;
+}
+
+.reveal-missing {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  align-items: center;
+  padding: var(--spacing-2xl) var(--spacing-md);
+}
+
+/* --------------------------------------------------------------------------
+   Gallery
+   -------------------------------------------------------------------------- */
+.gallery-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.gallery-head h2 {
+  margin-right: auto;
+}
+
+.gallery-count {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-size: 0.8em;
+}
+
+.gallery-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.gallery-section-title {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  margin: var(--spacing-lg) 0 var(--spacing-sm);
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.gallery-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.gallery-card:hover {
+  border-color: var(--color-border-heavy);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.card-mosaic {
+  container-type: inline-size;
+  --mini: min(1.35rem, calc((100cqi - var(--mini-n, 1) * 2px) / var(--mini-n, 1)));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: var(--spacing-xs);
+}
+
+.mini-word {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.mini-tile {
+  width: var(--mini);
+  height: var(--mini);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: calc(var(--mini) * 0.53);
+  background: var(--color-copper-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+}
+
+.mini-word .mini-tile:nth-child(4n + 2) { background: var(--color-primary-bg); }
+.mini-word .mini-tile:nth-child(4n + 3) { background: var(--color-warning-bg); }
+.mini-word .mini-tile:nth-child(4n + 4) { background: var(--color-surface-inset); }
+
+.card-title {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-variant: small-caps;
+}
+
+.card-link {
+  color: var(--color-text);
+}
+
+/* Stretched link: the whole card opens the reveal. */
+.card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.card-link:focus-visible {
+  outline: none;
+}
+
+.gallery-card:has(.card-link:focus-visible) {
+  outline: 2px solid var(--color-copper);
+  outline-offset: 2px;
+}
+
+.card-source {
+  display: none;
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.gallery:has(#show-sources:checked) .card-source {
+  display: block;
+}
+
+.card-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: var(--spacing-xs);
+}
+
+.card-stars {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.card-remove {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 480px) {
+  .reveal-stage {
+    padding: var(--spacing-lg) var(--spacing-sm);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile:hover:not(:disabled) {
+    transform: none;
+  }
+}

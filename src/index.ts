@@ -3,9 +3,12 @@ import { loadWordLists } from "./store/wordlists";
 import { handlePageRoute } from "./routes/pages";
 import { handleAttemptRoute } from "./routes/attempts";
 import { handleSettingsRoute } from "./routes/settings";
+import { handleRevealRoute } from "./routes/reveals";
+import { revealsDir } from "./store/reveals";
 
 mkdirSync("data/attempts", { recursive: true });
 mkdirSync("data/mappings", { recursive: true });
+mkdirSync(revealsDir(), { recursive: true });
 
 console.log("Loading word lists...");
 const startTime = performance.now();
@@ -19,7 +22,8 @@ const server = Bun.serve({
       const response =
         handlePageRoute(req) ??
         (await handleAttemptRoute(req)) ??
-        (await handleSettingsRoute(req));
+        (await handleSettingsRoute(req)) ??
+        (await handleRevealRoute(req));
 
       if (response) return response;
       return new Response("Not Found", { status: 404 });

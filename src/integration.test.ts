@@ -1,10 +1,12 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { rmSync, mkdirSync, existsSync } from "fs";
+import { rmSync, mkdirSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { loadWordLists } from "./store/wordlists";
 import { handlePageRoute } from "./routes/pages";
 import { handleAttemptRoute } from "./routes/attempts";
 import { handleSettingsRoute } from "./routes/settings";
+import { handleRevealRoute } from "./routes/reveals";
+import { listSeeds } from "./store/reveals";
 
 const PORT = 3099;
 const BASE = `http://localhost:${PORT}`;
@@ -54,7 +56,8 @@ beforeAll(async () => {
         const response =
           handlePageRoute(req) ??
           (await handleAttemptRoute(req)) ??
-          (await handleSettingsRoute(req));
+          (await handleSettingsRoute(req)) ??
+          (await handleRevealRoute(req));
 
         if (response) return response;
         return new Response("Not Found", { status: 404 });
@@ -612,5 +615,204 @@ describe("Validation", () => {
     form.set("wordListId", "../../package");
     const res = await fetch(`${BASE}/attempts`, { method: "POST", body: form, redirect: "manual" });
     expect(res.status).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Vitrin: reveals, standalone export, gallery, seeds
+// ---------------------------------------------------------------------------
+
+describe("Vitrin", () => {
+  const REVEALS = "data/test-reveals";
+  const prevDir = process.env.REVEALS_DIR;
+  const slugRe = /\/r\/([a-z2-9]{6})/;
+  const revealFiles = () => (existsSync(REVEALS) ? readdirSync(REVEALS).length : 0);
+
+  async function attemptWith(sourceText: string, words: string[]): Promise<string> {
+    const form = new FormData();
+    form.set("sourceText", sourceText);
+    form.set("wordListId", "turkce_kelime_listesi");
+    const res = await fetch(`${BASE}/attempts`, { method: "POST", body: form, redirect: "manual" });
+    const id = decodeURIComponent(res.headers.get("HX-Redirect")!.replace("/attempts/", ""));
+    createdAttemptIds.push(id);
+    await setWords(id, words);
+    return id;
+  }
+
+  async function setWords(id: string, words: string[]) {
+    const f = new FormData();
+    f.set("ci", "0");
+    words.forEach((w, i) => f.set(`word_${i}`, w));
+    return fetch(`${BASE}/attempts/${id}/chosen`, { method: "PUT", body: f });
+  }
+
+  async function sergile(id: string, fields: Record<string, string>) {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(fields)) f.set(k, v);
+    return fetch(`${BASE}/attempts/${id}/reveals`, { method: "POST", body: f });
+  }
+
+  let attemptId: string;
+  let slug: string;
+  const seed = listSeeds()[0];
+
+  beforeAll(async () => {
+    process.env.REVEALS_DIR = REVEALS;
+    rmSync(REVEALS, { recursive: true, force: true });
+    attemptId = await attemptWith("zebra kuşu", ["zur", "kuşbea"]);
+  });
+
+  afterAll(() => {
+    rmSync(REVEALS, { recursive: true, force: true });
+    if (prevDir === undefined) delete process.env.REVEALS_DIR;
+    else process.env.REVEALS_DIR = prevDir;
+  });
+
+  test("1. perfect workspace offers Sergile; imperfect does not", async () => {
+    const body = await (await fetch(`${BASE}/attempts/${attemptId}`)).text();
+    expect(body).toContain("btn-sergile");
+    expect(body).toContain('id="reveal-slot-0"');
+    expect(body).toContain("Çalışma Alanı");
+    const other = await attemptWith("ebabil", ["bal"]);
+    expect(await (await fetch(`${BASE}/attempts/${other}`)).text()).not.toContain("btn-sergile");
+  });
+
+  test("2. reveal form fragment; bad ci is an alert", async () => {
+    const form = await (await fetch(`${BASE}/attempts/${attemptId}/reveal-form?ci=0`)).text();
+    expect(form).toContain('name="title"');
+    expect(form).toContain('name="note"');
+    const bad = await fetch(`${BASE}/attempts/${attemptId}/reveal-form?ci=9`);
+    expect(bad.status).toBe(200);
+    expect(await bad.text()).toContain('role="alert"');
+  });
+
+  test("3. POST creates a reveal with an OOB badge", async () => {
+    const res = await sergile(attemptId, { ci: "0", title: "Deneme" });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    slug = body.match(slugRe)![1];
+    expect(body).toContain('id="reveal-mark-0"');
+    expect(body).toContain('hx-swap-oob="true"');
+    expect(existsSync(`${REVEALS}/${slug}.json`)).toBe(true);
+    // Idempotent for the same words
+    expect((await (await sergile(attemptId, { ci: "0" })).text()).match(slugRe)![1]).toBe(slug);
+    expect(revealFiles()).toBe(1);
+  });
+
+  test("3b. re-showcasing the same words says the existing reveal was kept", async () => {
+    const body = await (await sergile(attemptId, { ci: "0", title: "Yeni başlık" })).text();
+    expect(body).toContain("zaten sergilenmiş");
+    expect(revealFiles()).toBe(1);
+  });
+
+  test("3c. traversal attempt ids are rejected", async () => {
+    const res = await fetch(`${BASE}/attempts/..%2Freveals%2F${slug}/reveal-form?ci=0`);
+    expect(res.status).toBe(404);
+  });
+
+  test("4. badge on reload; editing the words removes it", async () => {
+    const body = await (await fetch(`${BASE}/attempts/${attemptId}`)).text();
+    expect(body).toContain(`class="reveal-badge" href="/r/${slug}"`);
+    expect(body).not.toContain("btn-sergile");
+    const edited = await (await setWords(attemptId, ["kuşbea", "zur"])).text();
+    expect(edited).not.toContain("reveal-badge");
+    expect(edited).toContain("btn-sergile");
+    const back = await (await setWords(attemptId, ["zur", "kuşbea"])).text();
+    expect(back).toContain(`href="/r/${slug}"`);
+  });
+
+  test("5. imperfect and stray punctuation are refused without writing", async () => {
+    const before = revealFiles();
+    const imperfect = await attemptWith("ebabil", ["bal"]);
+    const r1 = await sergile(imperfect, { ci: "0" });
+    expect(r1.status).toBe(200);
+    expect(await r1.text()).toContain('role="alert"');
+    const punct = await attemptWith("elma", ["el'ma"]);
+    expect(await (await sergile(punct, { ci: "0" })).text()).toContain('role="alert"');
+    expect(await (await sergile(attemptId, { ci: "0", title: "x".repeat(61) })).text()).toContain('role="alert"');
+    expect(revealFiles()).toBe(before);
+  });
+
+  test("6. unknown attempt is 404", async () => {
+    expect((await sergile("nope", { ci: "0" })).status).toBe(404);
+  });
+
+  test("7. reveal page hides the source", async () => {
+    const res = await fetch(`${BASE}/r/${slug}`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("reveal-stage");
+    expect(body).toContain("Deneme");
+    expect(body).toContain("data-puzzle");
+    expect(body.toLocaleLowerCase("tr-TR")).not.toContain("zebra");
+    expect(await (await fetch(`${BASE}/r/${slug}?oyun=1`)).text()).toContain('data-mode="oyun"');
+  });
+
+  test("8. standalone export", async () => {
+    const res = await fetch(`${BASE}/r/${slug}/bulmaca.html`);
+    expect(res.headers.get("Content-Disposition")).toBe(`attachment; filename="anagram-${slug}.html"`);
+    const body = await res.text();
+    for (const s of ["<style>", "<script>", "data-puzzle"]) expect(body).toContain(s);
+    for (const s of ["unpkg.com/htmx", "/static/", "hx-"]) expect(body).not.toContain(s);
+    expect(body.toLocaleLowerCase("tr-TR")).not.toContain("zebra");
+  });
+
+  test("9. gallery lists user and seed cards; sources only in hidden spans", async () => {
+    const body = await (await fetch(`${BASE}/vitrin`)).text();
+    expect(body).toContain(`data-slug="${slug}"`);
+    expect(body).toContain("Hazır bulmacalar");
+    for (const s of listSeeds()) expect(body).toContain(`data-slug="${s.slug}"`);
+    expect(body).toContain("Kendini sına");
+    expect(body).toContain("/static/reveal.js");
+    const re = /<span class="card-source">[\s\S]*?<\/span>/g;
+    const rest = body.replace(re, "");
+    expect(rest).not.toContain("zebra kuşu");
+    for (const s of listSeeds()) expect(rest).not.toContain(s.sourceText);
+    expect((body.match(re) ?? []).join("")).toContain("zebra kuşu");
+  });
+
+  test("10. seeds play and cannot be deleted", async () => {
+    expect((await fetch(`${BASE}/r/${seed.slug}`)).status).toBe(200);
+    expect((await fetch(`${BASE}/r/${seed.slug}`, { method: "DELETE" })).status).toBe(404);
+    expect((await fetch(`${BASE}/r/${seed.slug}`)).status).toBe(200);
+  });
+
+  test("11. home card links the reveal", async () => {
+    const body = await (await fetch(`${BASE}/`)).text();
+    expect(body).toContain(`class="reveal-badge" href="/r/${slug}"`);
+    // never nested inside the card's own link
+    expect(body).not.toMatch(/<a\b[^>]*attempt-card-link[^>]*>(?:(?!<\/a>)[\s\S])*reveal-badge/);
+  });
+
+  test("P2. share card SVG", async () => {
+    const res = await fetch(`${BASE}/r/${slug}/card.svg`);
+    expect(res.headers.get("Content-Type")).toContain("image/svg+xml");
+    expect(res.headers.get("Content-Disposition")).toBeNull();
+    expect(await res.text()).toContain("ZEBRA KUŞU");
+    const gizli = await fetch(`${BASE}/r/${slug}/card.svg?gizli=1&indir=1`);
+    expect(gizli.headers.get("Content-Disposition")).toBe(`attachment; filename="anagram-${slug}-bilmece.svg"`);
+    expect((await gizli.text()).toLocaleLowerCase("tr-TR")).not.toContain("zebra");
+    expect((await fetch(`${BASE}/r/AAAAAA/card.svg`)).status).toBe(404);
+    expect(await (await fetch(`${BASE}/r/${slug}`)).text()).toContain(`/r/${slug}/card.svg?gizli=1&amp;indir=1`);
+  });
+
+  test("12. delete a user reveal", async () => {
+    const res = await fetch(`${BASE}/r/${slug}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    // Main swap empties the card; OOB keeps the header count in sync.
+    const body = await res.text();
+    expect(body.startsWith('<span class="gallery-count" id="gallery-count" hx-swap-oob="true">')).toBe(true);
+    expect(body).not.toContain("gallery-card");
+    const gone = await fetch(`${BASE}/r/${slug}`);
+    expect(gone.status).toBe(404);
+    const page = await gone.text();
+    expect(page).toContain("Anagram bulunamadı");
+    expect(page).toContain("/static/reveal.js");
+  });
+
+  test("13. bad slugs are 404", async () => {
+    for (const p of ["/r/AAAAAA", "/r/..%2F..%2Fetc", "/r/abc", "/r/AAAAAA/bulmaca.html", "/r/%E0%A4", "/r/%ZZ", "/r/%ZZ/card.svg"]) {
+      expect((await fetch(`${BASE}${p}`)).status).toBe(404);
+    }
   });
 });

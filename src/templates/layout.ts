@@ -1,4 +1,4 @@
-export function layout(title: string, body: string): string {
+export function layout(title: string, body: string, opts: { extraHead?: string } = {}): string {
   return `<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -13,11 +13,15 @@ export function layout(title: string, body: string): string {
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="/static/app.js" defer></script>
+  ${opts.extraHead ?? ""}
 </head>
 <body>
   <nav>
     <a href="/" class="logo"><img src="/static/logo.svg" alt="Anagramcı" height="28"></a>
-    <a href="/settings">Ayarlar</a>
+    <div class="nav-links">
+      <a href="/vitrin">Vitrin</a>
+      <a href="/settings">Ayarlar</a>
+    </div>
   </nav>
   <main>${body}</main>
 </body>

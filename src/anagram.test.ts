@@ -94,3 +94,79 @@ describe("buildMappingNormalizer", () => {
     expect(mapping.get("s")).toBe("s");
   });
 });
+
+import { computeCharMapping, normalizeLetters, scrambleScore } from "./anagram";
+
+describe("computeCharMapping", () => {
+  const none = new Map<string, string>();
+
+  test("identity mapping", () => {
+    const { charMap, overflowIdxs, sourceOnlyIdxs } = computeCharMapping("abc", ["abc"], none);
+    expect([...charMap.entries()]).toEqual([[0, 0], [1, 1], [2, 2]]);
+    expect(overflowIdxs.size).toBe(0);
+    expect(sourceOnlyIdxs.size).toBe(0);
+  });
+
+  test("overflow and source-only chars", () => {
+    const { overflowIdxs, sourceOnlyIdxs } = computeCharMapping("ab c", ["ax"], none);
+    expect([...overflowIdxs]).toEqual([1]);
+    expect([...sourceOnlyIdxs]).toEqual([1, 2]);
+  });
+
+  test("punctuation keeps its own source index (İstanbul'a)", () => {
+    const { charMap, sourceOnlyIdxs } = computeCharMapping("İstanbul'a", ["istanbula"], none);
+    // i s t a n b u l ' a → apostrophe is source index 8
+    expect(sourceOnlyIdxs.has(8)).toBe(true);
+    expect(charMap.get(0)).toBe(0);
+    expect(charMap.get(8)).toBe(9);
+  });
+
+  test("repeated letters: order-preserving and minimal (anana → naana)", () => {
+    const src = "anana";
+    const word = "naana";
+    const { charMap } = computeCharMapping(src, [word], none);
+    const assigned = [...word].map((_, i) => charMap.get(i)!);
+    // a's: source 0,2,4 ; n's: source 1,3 — greedy keeps their order
+    expect(assigned).toEqual([1, 0, 2, 3, 4]);
+    const cost = (perm: number[]) => perm.reduce((s, p, i) => s + Math.abs(i - p), 0);
+
+    // Brute force over every valid letter-preserving assignment.
+    let best = Infinity;
+    const permute = (rest: number[], acc: number[]) => {
+      if (acc.length === word.length) { best = Math.min(best, cost(acc)); return; }
+      for (let k = 0; k < rest.length; k++) {
+        if (src[rest[k]] !== word[acc.length]) continue;
+        permute([...rest.slice(0, k), ...rest.slice(k + 1)], [...acc, rest[k]]);
+      }
+    };
+    permute([0, 1, 2, 3, 4], []);
+    expect(cost(assigned)).toBe(best);
+  });
+});
+
+describe("normalizeLetters", () => {
+  test("tr-TR lowercase, punctuation dropped", () => {
+    expect(normalizeLetters("İstanbul'a", new Map())).toEqual(["i", "s", "t", "a", "n", "b", "u", "l", "a"]);
+  });
+  test("applies mapping", () => {
+    expect(normalizeLetters("âlem", buildMappingNormalizer([["â", "a"]]))).toEqual(["a", "l", "e", "m"]);
+  });
+  test("drops digits and punctuation", () => {
+    expect(normalizeLetters("19-23 Iı!", new Map())).toEqual(["ı", "ı"]);
+  });
+});
+
+describe("scrambleScore", () => {
+  test("trivial cases", () => {
+    expect(scrambleScore([])).toBe(0);
+    expect(scrambleScore([0])).toBe(0);
+    expect(scrambleScore([0, 1, 2, 3])).toBe(0);
+  });
+  test("reversal is 100", () => {
+    expect(scrambleScore([4, 3, 2, 1, 0])).toBe(100);
+    expect(scrambleScore([5, 4, 3, 2, 1, 0])).toBe(100);
+  });
+  test("one adjacent swap on n=10 is 4", () => {
+    expect(scrambleScore([1, 0, 2, 3, 4, 5, 6, 7, 8, 9])).toBe(4);
+  });
+});
